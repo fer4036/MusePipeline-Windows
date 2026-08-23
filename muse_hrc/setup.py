@@ -32,7 +32,8 @@ setup(
         'console_scripts': [
             'muse_node=muse_hrc.muse_node:main',
             'database_node=muse_hrc.database_node:main',
-            'discovery_node=muse_hrc.discovery_node:main'
+            'discovery_node=muse_hrc.discovery_node:main',
+            'muse_collect=muse_hrc.standalone:main',
         ],
     },
 )

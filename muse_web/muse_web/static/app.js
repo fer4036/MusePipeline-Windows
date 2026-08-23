@@ -88,7 +88,7 @@ function recordingSeconds(session) {
 }
 
 function stateLabel(state) {
-  return ({streaming: 'Transmitiendo', connecting: 'Conectando', connected: 'Enlace BLE', reconnecting: 'Reconectando', disconnected: 'Desconectado', data_timeout: 'Sin datos', error: 'Error'})[state] || state;
+  return ({streaming: 'Transmitiendo', connecting: 'Conectando', connected: 'Enlace BLE', reconnecting: 'Reconectando', waiting_for_device: 'Esperando diadema', disconnected: 'Desconectado', data_timeout: 'Sin datos', error: 'Error'})[state] || state;
 }
 
 function renderOperators(operators = []) {
@@ -102,10 +102,10 @@ function renderOperators(operators = []) {
     const rates = user.rates || {};
     return `<article class="user-card ${connected ? 'online' : ''}">
       <div class="user-header"><div><span class="user-dot"></span><strong>${escapeHtml(user.operator)}</strong></div><span class="state-pill">${escapeHtml(stateLabel(user.state))}</span></div>
-      <dl><div><dt>Tiempo conectado</dt><dd data-connected="${Number(user.connected_since) || 0}">${formatDuration(user.connected_seconds)}</dd></div><div><dt>Batería</dt><dd>${escapeHtml(battery)}</dd></div><div><dt>Adaptador</dt><dd>${escapeHtml(user.adapter || '—')}</dd></div></dl>
+      <dl><div><dt>Tiempo conectado</dt><dd data-connected="${Number(user.connected_since) || 0}">${formatDuration(user.connected_seconds)}</dd></div><div><dt>Batería</dt><dd>${escapeHtml(battery)}</dd></div><div><dt>Adaptador</dt><dd>${escapeHtml(user.adapter || '—')}</dd></div><div><dt>MAC</dt><dd>${escapeHtml(user.mac || '—')}</dd></div><div><dt>Desconexiones</dt><dd>${Number(user.disconnect_count || 0)}</dd></div><div><dt>Reconexiones</dt><dd>${Number(user.reconnect_count || 0)}</dd></div></dl>
       <div class="rates"><span>EEG <b>${Number(rates.eeg || 0).toFixed(1)} Hz</b></span><span>IMU <b>${Number(rates.imu || 0).toFixed(1)} Hz</b></span><span>PPG <b>${Number(rates.ppg || 0).toFixed(1)} Hz</b></span></div>
       <div class="hz-actions">${['eeg', 'imu', 'ppg'].map((signal) => `<button class="hz-button" data-operator="${escapeHtml(user.operator)}" data-signal="${signal}" ${connected ? '' : 'disabled'}>Medir ${signal.toUpperCase()}</button>`).join('')}</div>
-      <p class="hz-result" id="hz-${escapeHtml(user.operator)}">Usa un botón para ejecutar el equivalente a <code>ros2 topic hz</code>.</p>
+      <p class="hz-result" id="hz-${escapeHtml(user.operator)}">Usa un botón para medir la tasa recibida por el backend activo.</p>
     </article>`;
   }).join('');
 }
@@ -246,9 +246,9 @@ function renderPreview(result) {
 }
 
 form.addEventListener('submit', async (event) => {
-  event.preventDefault(); prepareButton.disabled = true; showMessage('Preparando ROS 2 y buscando diademas…');
+  event.preventDefault(); prepareButton.disabled = true; showMessage('Preparando adquisición y buscando diademas…');
   try {
-    await api('/api/session/start', {method: 'POST', headers: mutationHeaders, body: JSON.stringify({subject_code: $('#subject-code').value, experiment: $('#experiment').value, hci_devices: $('#hci-devices').value, notes: $('#notes').value})});
+    await api('/api/session/start', {method: 'POST', headers: mutationHeaders, body: JSON.stringify({subject_code: $('#subject-code').value, experiment: $('#experiment').value, hci_devices: $('#hci-devices').value, backend: $('#pipeline-backend').value, notes: $('#notes').value})});
     showMessage('Pipeline preparado. Espera a que los usuarios aparezcan y luego comienza a registrar.');
     await Promise.all([refreshStatus(), refreshSessions(), refreshWorkshop()]);
   } catch (error) { showMessage(error.message, true); prepareButton.disabled = false; }
@@ -279,7 +279,7 @@ finishButton.addEventListener('click', async () => {
 $('#refresh-users').addEventListener('click', refreshStatus);
 $('#refresh-log').addEventListener('click', refreshStatus);
 graphButton.addEventListener('click', async () => {
-  graphButton.disabled = true; graphOutput.textContent = 'Consultando grafo ROS 2…';
+  graphButton.disabled = true; graphOutput.textContent = 'Consultando arquitectura activa…';
   try {
     const graph = await api('/api/ros/graph');
     graphOutput.textContent = `NODOS\n${graph.nodes.join('\n') || '(ninguno)'}\n\nTÓPICOS Y TIPOS\n${graph.topics.join('\n') || '(ninguno)'}`;

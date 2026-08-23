@@ -28,6 +28,11 @@ class FakePopen:
         return self.process
 
 
+class FailingPopen:
+    def __call__(self, _command, **_kwargs):
+        raise FileNotFoundError('runtime inexistente')
+
+
 def test_safe_component_removes_paths_and_personal_punctuation():
     assert safe_component('../../Sujeto Á-01', 'fallback') == 'sujeto-a-01'
 
@@ -53,6 +58,142 @@ def test_start_builds_fixed_ros_command_and_private_session(tmp_path):
     fake_popen.process.return_code = 0
     stopped = manager.stop(export=False)
     assert stopped['status'] == 'completed'
+
+
+def test_start_builds_standalone_command_and_private_control(tmp_path):
+    fake_popen = FakePopen()
+    manager = SessionManager(
+        tmp_path,
+        popen_factory=fake_popen,
+        standalone_python='/opt/muse/python',
+    )
+
+    result = manager.start(
+        'S-02',
+        'Baseline',
+        'hci1,hci2',
+        backend='standalone',
+    )
+
+    command = fake_popen.calls[0][0]
+    session_dir = tmp_path / result['session']['session_name']
+    assert command[:3] == [
+        '/opt/muse/python', '-m', 'muse_hrc.standalone'
+    ]
+    assert command[command.index('--hci-devices') + 1] == 'hci1,hci2'
+    assert '--paused' in command
+    assert '--control-file' in command
+    assert result['session']['backend'] == 'standalone'
+    control = json.loads(
+        (session_dir / 'control.json').read_text(encoding='utf-8')
+    )
+    assert control['recording'] is False
+
+    fake_popen.process.return_code = 0
+    manager.stop(export=False)
+
+
+def test_web_restart_reattaches_to_verified_standalone_collector(tmp_path):
+    fake_popen = FakePopen()
+    manager = SessionManager(
+        tmp_path,
+        popen_factory=fake_popen,
+        standalone_python='/opt/muse/python',
+    )
+    started = manager.start(
+        'S-02', 'Baseline', 'hci1,hci2', backend='standalone'
+    )
+    command = fake_popen.calls[0][0]
+
+    manager.shutdown()
+
+    recovered = SessionManager(
+        tmp_path,
+        process_alive_checker=lambda pid: pid == 987654,
+        process_command_reader=lambda pid: command if pid == 987654 else [],
+    )
+    status = recovered.status()
+
+    assert status['running'] is True
+    assert status['session']['session_name'] == started['session']['session_name']
+    assert status['session']['web_reattach_count'] == 1
+    assert recovered._process.pid == 987654
+
+
+def test_recovery_rejects_reused_pid_with_another_command(tmp_path):
+    fake_popen = FakePopen()
+    manager = SessionManager(
+        tmp_path,
+        popen_factory=fake_popen,
+        standalone_python='/opt/muse/python',
+    )
+    manager.start('S-02', 'Baseline', 'hci1', backend='standalone')
+    manager.shutdown()
+
+    recovered = SessionManager(
+        tmp_path,
+        process_alive_checker=lambda _pid: True,
+        process_command_reader=lambda _pid: ['/usr/bin/python', 'other.py'],
+    )
+
+    assert recovered.status()['running'] is False
+
+
+def test_launch_failure_is_reported_as_a_controlled_error(tmp_path):
+    manager = SessionManager(
+        tmp_path,
+        popen_factory=FailingPopen(),
+        standalone_python='/ruta/inexistente/python',
+    )
+
+    try:
+        manager.start(
+            'S-04', 'Baseline', 'hci1', backend='standalone'
+        )
+    except RuntimeError as error:
+        assert 'No se pudo iniciar el backend standalone' in str(error)
+    else:
+        raise AssertionError('El fallo de lanzamiento debe ser controlado')
+
+    metadata_path = next(tmp_path.glob('*/metadata.json'))
+    metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+    assert metadata['status'] == 'launch_error'
+    assert metadata['launch_error'] == 'runtime inexistente'
+
+
+def test_standalone_recording_control_requires_matching_ack(
+    tmp_path,
+    monkeypatch,
+):
+    fake_popen = FakePopen()
+    manager = SessionManager(
+        tmp_path,
+        popen_factory=fake_popen,
+        standalone_python='/opt/muse/python',
+    )
+    result = manager.start(
+        'S-03', 'Baseline', 'hci1', backend='standalone'
+    )
+    session_dir = tmp_path / result['session']['session_name']
+    monkeypatch.setattr(time, 'time_ns', lambda: 123456)
+    (session_dir / 'control_ack.json').write_text(json.dumps({
+        'request_id': '123456',
+        'success': True,
+    }), encoding='utf-8')
+
+    manager.start_recording()
+
+    control = json.loads(
+        (session_dir / 'control.json').read_text(encoding='utf-8')
+    )
+    assert control == {
+        'request_id': '123456',
+        'recording': True,
+        'timestamp': control['timestamp'],
+    }
+    manager._call_recording_service = lambda _enabled: None
+    fake_popen.process.return_code = 0
+    manager.stop(export=False)
 
 
 def test_invalid_adapter_input_never_reaches_subprocess(tmp_path):
@@ -118,6 +259,9 @@ def test_preview_and_machine_readable_operator_status(tmp_path):
             'state': 'metrics', 'operator': 'operador_a',
             'published_hz': {'eeg': 256, 'imu': 52, 'ppg': 64},
             'battery_percent': 73.5,
+            'mac': '00:55:da:00:00:01',
+            'disconnect_count': 2,
+            'reconnect_count': 2,
         },
     ]
     with (session_dir / 'pipeline.log').open('a', encoding='utf-8') as output:
@@ -130,8 +274,34 @@ def test_preview_and_machine_readable_operator_status(tmp_path):
     assert current['operators'][0]['state'] == 'streaming'
     assert current['operators'][0]['battery_percent'] == 73.5
     assert current['operators'][0]['rates']['ppg'] == 64.0
+    assert current['operators'][0]['mac'] == '00:55:da:00:00:01'
+    assert current['operators'][0]['disconnect_count'] == 2
+    assert current['operators'][0]['reconnect_count'] == 2
     assert preview['tables']['eeg_logs']['count'] == 1
     assert preview['tables']['eeg_logs']['rows'][0]['channel_1'] == 42.0
+
+    fake_popen.process.return_code = 0
+    manager.stop(export=False)
+
+
+def test_operator_status_reports_waiting_for_powered_headband(tmp_path):
+    fake_popen = FakePopen()
+    manager = SessionManager(tmp_path, popen_factory=fake_popen)
+    status = manager.start('S-01', 'Reconnect', 'hci1')
+    session_dir = tmp_path / status['session']['session_name']
+    with (session_dir / 'pipeline.log').open('a', encoding='utf-8') as output:
+        output.write('MUSE_STATUS_JSON=' + json.dumps({
+            'state': 'waiting_for_device',
+            'operator': 'operador_a',
+            'timestamp': time.time(),
+            'adapter': 'hci1',
+            'mac': '00:55:da:00:00:01',
+            'disconnect_count': 1,
+        }) + '\n')
+
+    operator = manager.status()['operators'][0]
+    assert operator['state'] == 'waiting_for_device'
+    assert operator['mac'] == '00:55:da:00:00:01'
 
     fake_popen.process.return_code = 0
     manager.stop(export=False)

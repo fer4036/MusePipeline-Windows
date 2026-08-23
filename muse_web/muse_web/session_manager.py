@@ -6,6 +6,7 @@ import re
 import signal
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 import unicodedata
@@ -27,6 +28,7 @@ OPERATOR_PATTERN = re.compile(r'^operador_[a-z]+$')
 STATUS_PATTERN = re.compile(r'MUSE_STATUS_JSON=(\{.*\})')
 SIGNALS = {'eeg', 'imu', 'ppg'}
 GROUND_TRUTH_SCORES = ('task_engagement', 'effort', 'persistence', 'flow')
+PIPELINE_BACKENDS = {'ros2', 'standalone'}
 
 
 def safe_component(value, fallback):
@@ -36,10 +38,63 @@ def safe_component(value, fallback):
     return cleaned[:48] or fallback
 
 
+def _process_is_alive(pid):
+    """Return whether a Linux PID exists and is not a zombie."""
+    try:
+        process_stat = (Path('/proc') / str(pid) / 'stat').read_text(
+            encoding='utf-8'
+        )
+        state = process_stat.rsplit(')', 1)[1].split()[0]
+        if state == 'Z':
+            return False
+        os.kill(pid, 0)
+    except (IndexError, OSError, ValueError):
+        return False
+    return True
+
+
+def _process_command(pid):
+    """Read one process command as argv without invoking a shell."""
+    try:
+        raw = (Path('/proc') / str(pid) / 'cmdline').read_bytes()
+    except OSError:
+        return []
+    return [
+        item.decode('utf-8', errors='replace')
+        for item in raw.split(b'\0') if item
+    ]
+
+
+class AttachedProcess:
+    """Small Popen-compatible handle for a collector owned by an older GUI."""
+
+    def __init__(self, pid, alive_checker=_process_is_alive):
+        self.pid = pid
+        self._alive_checker = alive_checker
+
+    def poll(self):
+        return None if self._alive_checker(self.pid) else -1
+
+    def wait(self, timeout=None):
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self.poll() is None:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(str(self.pid), timeout)
+            time.sleep(0.05)
+        return -1
+
+
 class SessionManager:
     """Own at most one pipeline process and one session directory."""
 
-    def __init__(self, sessions_root=None, popen_factory=subprocess.Popen):
+    def __init__(
+        self,
+        sessions_root=None,
+        popen_factory=subprocess.Popen,
+        standalone_python=None,
+        process_alive_checker=_process_is_alive,
+        process_command_reader=_process_command,
+    ):
         default_root = Path.home() / 'MuseResearch' / 'sessions'
         self.sessions_root = Path(
             sessions_root or os.environ.get('MUSE_SESSIONS_DIR', default_root)
@@ -47,11 +102,41 @@ class SessionManager:
         self.sessions_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.sessions_root, 0o700)
         self._popen_factory = popen_factory
+        workspace_root = Path(__file__).resolve().parents[2]
+        configured_python = os.environ.get('MUSE_STANDALONE_PYTHON')
+        if standalone_python is not None:
+            selected_python = Path(standalone_python).expanduser()
+        elif (
+            configured_python
+            and Path(configured_python).expanduser().is_file()
+        ):
+            selected_python = Path(configured_python).expanduser()
+        else:
+            candidates = (
+                workspace_root / 'muse_env' / 'bin' / 'python',
+                workspace_root.parent / 'muse_env' / 'bin' / 'python',
+                Path(sys.executable),
+            )
+            selected_python = next(
+                (candidate for candidate in candidates if candidate.is_file()),
+                Path(sys.executable),
+            )
+        self._standalone_python = str(selected_python)
+        self._process_alive_checker = process_alive_checker
+        self._process_command_reader = process_command_reader
         self._lock = threading.RLock()
         self._process = None
         self._active = None
+        self._recover_standalone_session()
 
-    def start(self, subject_code, experiment, hci_devices, notes=''):
+    def start(
+        self,
+        subject_code,
+        experiment,
+        hci_devices,
+        notes='',
+        backend='ros2',
+    ):
         with self._lock:
             if self._active is not None:
                 raise RuntimeError(
@@ -61,6 +146,8 @@ class SessionManager:
                 raise ValueError(
                     'Adaptadores inválidos; usa una lista como hci1,hci2,hci3,hci4'
                 )
+            if backend not in PIPELINE_BACKENDS:
+                raise ValueError('Backend inválido; usa ros2 o standalone')
 
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             subject_slug = safe_component(subject_code, 'participante')
@@ -75,6 +162,7 @@ class SessionManager:
                 'experiment': experiment.strip(),
                 'notes': notes.strip(),
                 'hci_devices': hci_devices,
+                'backend': backend,
                 'started_at': datetime.now().astimezone().isoformat(),
                 'status': 'preparing',
                 'recording': False,
@@ -86,12 +174,32 @@ class SessionManager:
             self._initialize_ground_truth_schema(database_path)
             os.chmod(database_path, 0o600)
             log_path = session_dir / 'pipeline.log'
-            command = [
-                'ros2', 'launch', 'muse_hrc', 'muse_system.launch.py',
-                f'hci_devices:={hci_devices}',
-                f'database_path:={database_path}',
-                'recording_enabled:=false',
-            ]
+            control_path = session_dir / 'control.json'
+            if backend == 'standalone':
+                self._write_control_request(
+                    control_path,
+                    False,
+                    'initial',
+                )
+                command = [
+                    self._standalone_python,
+                    '-m',
+                    'muse_hrc.standalone',
+                    '--hci-devices',
+                    hci_devices,
+                    '--db',
+                    str(database_path),
+                    '--paused',
+                    '--control-file',
+                    str(control_path),
+                ]
+            else:
+                command = [
+                    'ros2', 'launch', 'muse_hrc', 'muse_system.launch.py',
+                    f'hci_devices:={hci_devices}',
+                    f'database_path:={database_path}',
+                    'recording_enabled:=false',
+                ]
             log_file = log_path.open('a', encoding='utf-8')
             os.chmod(log_path, 0o600)
             try:
@@ -102,11 +210,14 @@ class SessionManager:
                     start_new_session=True,
                     text=True,
                 )
-            except Exception:
+            except Exception as error:
                 log_file.close()
                 metadata['status'] = 'launch_error'
+                metadata['launch_error'] = str(error)
                 self._write_metadata(session_dir, metadata)
-                raise
+                raise RuntimeError(
+                    f'No se pudo iniciar el backend {backend}: {error}'
+                ) from error
             log_file.close()
 
             metadata['status'] = 'ready'
@@ -118,6 +229,7 @@ class SessionManager:
                 'database': database_path,
                 'log': log_path,
                 'metadata': metadata,
+                'control': control_path,
             }
             return self.status()
 
@@ -679,8 +791,26 @@ class SessionManager:
             raise ValueError('Operador inválido')
         if signal_name not in SIGNALS:
             raise ValueError('Señal inválida')
-        self._require_active()
+        active = self._require_active()
         topic = f'/{operator}/{signal_name}'
+        if active['metadata'].get('backend') == 'standalone':
+            status = next(
+                (
+                    item for item in self._operator_status(active['log'])
+                    if item['operator'] == operator
+                ),
+                None,
+            )
+            rate = status and status.get('rates', {}).get(signal_name)
+            if not rate:
+                raise RuntimeError(
+                    f'No hay una tasa reciente para {operator}/{signal_name}'
+                )
+            return {
+                'topic': f'{operator}/{signal_name}',
+                'average_hz': float(rate),
+                'output': ['Métrica calculada por el núcleo Python'],
+            }
         command = ['ros2', 'topic', 'hz', topic, '--window', '200']
         process = self._popen_factory(
             command,
@@ -714,7 +844,17 @@ class SessionManager:
 
     def ros_graph(self):
         """Return the current ROS nodes and typed topics for diagnostics."""
-        self._require_active()
+        active = self._require_active()
+        if active['metadata'].get('backend') == 'standalone':
+            operators = self._operator_status(active['log'])
+            return {
+                'nodes': ['standalone_collector'],
+                'topics': [
+                    f"/{item['operator']}/{signal_name} [Python stream]"
+                    for item in operators
+                    for signal_name in sorted(SIGNALS)
+                ],
+            }
         commands = {
             'nodes': ['ros2', 'node', 'list'],
             'topics': ['ros2', 'topic', 'list', '-t'],
@@ -741,7 +881,74 @@ class SessionManager:
     def shutdown(self):
         with self._lock:
             if self._active is not None and self._process is not None:
+                if self._active['metadata'].get('backend') == 'standalone':
+                    # The Python collector is the local edge process. A web
+                    # restart must not interrupt BLE or data capture; the next
+                    # SessionManager will reattach through session metadata.
+                    self._process = None
+                    self._active = None
+                    return
                 self.stop(export=True)
+
+    def _recover_standalone_session(self):
+        """Reattach to the newest verified standalone collector, if any."""
+        allowed_states = {'ready', 'recording'}
+        for session_dir in sorted(self.sessions_root.iterdir(), reverse=True):
+            metadata_path = session_dir / 'metadata.json'
+            if not session_dir.is_dir() or not metadata_path.is_file():
+                continue
+            try:
+                metadata = self._read_metadata(session_dir)
+                pid = int(metadata.get('pipeline_pid', 0))
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                continue
+            if (
+                metadata.get('backend') != 'standalone' or
+                metadata.get('status') not in allowed_states or
+                pid <= 1 or
+                not self._standalone_process_matches(pid, session_dir)
+            ):
+                continue
+
+            metadata['web_reattach_count'] = (
+                int(metadata.get('web_reattach_count', 0)) + 1
+            )
+            metadata['web_reattached_at'] = (
+                datetime.now().astimezone().isoformat()
+            )
+            self._write_metadata(session_dir, metadata)
+            self._process = AttachedProcess(
+                pid, alive_checker=self._process_alive_checker
+            )
+            self._active = {
+                'directory': session_dir,
+                'database': session_dir / 'raw.sqlite',
+                'log': session_dir / 'pipeline.log',
+                'metadata': metadata,
+                'control': session_dir / 'control.json',
+            }
+            return
+
+    def _standalone_process_matches(self, pid, session_dir):
+        """Reject stale/reused PIDs before attaching or signalling a process."""
+        if not self._process_alive_checker(pid):
+            return False
+        command = self._process_command_reader(pid)
+        expected_database = str((session_dir / 'raw.sqlite').resolve())
+        expected_control = str((session_dir / 'control.json').resolve())
+        try:
+            database_matches = (
+                command[command.index('--db') + 1] == expected_database
+            )
+            control_matches = (
+                command[command.index('--control-file') + 1] == expected_control
+            )
+        except (ValueError, IndexError):
+            return False
+        return (
+            'muse_hrc.standalone' in command and
+            database_matches and control_matches
+        )
 
     def _require_active(self):
         if self._active is None or self._process is None:
@@ -1017,6 +1224,64 @@ class SessionManager:
             active['metadata']['workshop_close_error'] = str(error)
 
     def _call_recording_service(self, enabled):
+        active = self._require_active()
+        if active['metadata'].get('backend') == 'standalone':
+            self._call_standalone_recording_control(active, enabled)
+            return
+        self._call_ros_recording_service(enabled)
+
+    @staticmethod
+    def _write_control_request(path, enabled, request_id):
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(
+            json.dumps({
+                'request_id': request_id,
+                'recording': bool(enabled),
+                'timestamp': time.time(),
+            }),
+            encoding='utf-8',
+        )
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+
+    def _call_standalone_recording_control(self, active, enabled):
+        request_id = str(time.time_ns())
+        control_path = active['control']
+        ack_path = control_path.with_name('control_ack.json')
+        self._write_control_request(control_path, enabled, request_id)
+        deadline = time.monotonic() + 8.0
+        while time.monotonic() < deadline:
+            if self._process.poll() is not None:
+                raise RuntimeError(
+                    'El colector standalone terminó inesperadamente'
+                )
+            try:
+                acknowledgement = json.loads(
+                    ack_path.read_text(encoding='utf-8')
+                )
+            except (
+                FileNotFoundError,
+                OSError,
+                ValueError,
+                json.JSONDecodeError,
+            ):
+                time.sleep(0.05)
+                continue
+            if acknowledgement.get('request_id') != request_id:
+                time.sleep(0.05)
+                continue
+            if not acknowledgement.get('success'):
+                raise RuntimeError(
+                    'El colector no pudo cambiar la grabación: '
+                    + str(acknowledgement.get('message', 'error desconocido'))
+                )
+            return
+        raise RuntimeError(
+            'El colector standalone no confirmó el cambio de grabación'
+        )
+
+    @staticmethod
+    def _call_ros_recording_service(enabled):
         request = '{data: ' + ('true' if enabled else 'false') + '}'
         try:
             result = subprocess.run(
@@ -1170,19 +1435,31 @@ class SessionManager:
                 'battery_percent': None,
                 'rates': {'eeg': 0.0, 'imu': 0.0, 'ppg': 0.0},
                 'adapter': None,
+                'mac': None,
+                'disconnect_count': 0,
+                'reconnect_count': 0,
             })
             state = payload.get('state')
             item['adapter'] = payload.get('adapter') or item['adapter']
+            item['mac'] = payload.get('mac') or item['mac']
             if state == 'streaming':
                 item['state'] = 'streaming'
                 item['connected_since'] = payload.get('timestamp', time.time())
-            elif state in {'connecting', 'connected', 'reconnecting'}:
+            elif state in {
+                'connecting', 'connected', 'reconnecting',
+                'waiting_for_device',
+            }:
                 item['state'] = state
                 if state != 'connected':
                     item['connected_since'] = None
             elif state in {'disconnected', 'data_timeout', 'error'}:
                 item['state'] = state
                 item['connected_since'] = None
+                if (
+                    state in {'disconnected', 'data_timeout'} and
+                    not isinstance(payload.get('disconnect_count'), int)
+                ):
+                    item['disconnect_count'] += 1
             elif state == 'metrics':
                 if payload.get('streaming'):
                     item['state'] = 'streaming'
@@ -1196,6 +1473,10 @@ class SessionManager:
                 battery = payload.get('battery_percent')
                 if isinstance(battery, (int, float)) and battery > 0:
                     item['battery_percent'] = battery
+            if isinstance(payload.get('disconnect_count'), int):
+                item['disconnect_count'] = payload['disconnect_count']
+            if isinstance(payload.get('reconnect_count'), int):
+                item['reconnect_count'] = payload['reconnect_count']
 
         now = time.time()
         for item in operators.values():

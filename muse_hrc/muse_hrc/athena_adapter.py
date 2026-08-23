@@ -1,6 +1,7 @@
 """Athena integration with explicit BlueZ adapter selection."""
 
 import asyncio
+import atexit
 import sys
 import time
 
@@ -22,7 +23,7 @@ class _HciBleakDevice(backends.BleakDevice):
         if not self._name:
             return
         print(f'[{self._elapsed(start):.1f}s] Scanning for {self._name}...')
-        devices = backends._wait(
+        devices = self._adapter.wait(
             backends.bleak.BleakScanner.discover(
                 timeout=5.0,
                 adapter=self._hci_device,
@@ -61,19 +62,19 @@ class _HciBleakDevice(backends.BleakDevice):
                 disconnected_callback=self._disconnected_callback,
             )
             try:
-                backends._wait(client.connect())
+                self._adapter.wait(client.connect())
             except connect_errors as error:
                 print(
                     f'[{self._elapsed(start):.1f}s] Failed to connect: {error}',
                     file=sys.stderr,
                 )
                 try:
-                    backends._wait(client.disconnect())
+                    self._adapter.wait(client.disconnect())
                 except Exception:
                     pass
                 if attempts == 1 + retries:
                     return False
-                backends.sleep(backends.RETRY_SLEEP_TIMEOUT)
+                self._adapter.pump(backends.RETRY_SLEEP_TIMEOUT)
                 attempts += 1
             else:
                 print(f'[{self._elapsed(start):.1f}s] BLE connected.')
@@ -83,12 +84,74 @@ class _HciBleakDevice(backends.BleakDevice):
         self._adapter.connected.add(self)
         return True
 
+    def disconnect(self):
+        """Disconnect on the event loop owned by this headband."""
+        client = self._client
+        try:
+            if client is not None:
+                self._adapter.wait(client.disconnect())
+        finally:
+            self._client = None
+            self._adapter.connected.discard(self)
+
+    def char_write_handle(self, value_handle, value, wait_for_response=True, timeout=30):
+        declaration_handle = value_handle - 1
+        self._adapter.wait(
+            self._client.write_gatt_char(
+                declaration_handle,
+                bytearray(value),
+                wait_for_response,
+            )
+        )
+
+    def char_write_uuid(self, uuid, value, wait_for_response=True):
+        self._adapter.wait(
+            self._client.write_gatt_char(
+                uuid,
+                bytearray(value),
+                response=wait_for_response,
+            )
+        )
+
+    def subscribe(self, uuid, callback=None, indication=False, wait_for_response=True):
+        def wrap(gatt_characteristic, data):
+            value_handle = gatt_characteristic.handle + 1
+            callback(value_handle, data)
+
+        self._adapter.wait(self._client.start_notify(uuid, wrap))
+
 
 class _HciBleakBackend(backends.BleakBackend):
     def __init__(self, hci_device, disconnected_callback):
-        super().__init__()
+        # muselsl normally shares a module-global asyncio loop. That works while
+        # every Muse lives in a separate ROS process, but it fails when the
+        # standalone collector connects several headbands from worker threads.
+        # Keep one loop per backend/headband and never replace muselsl's global
+        # sleep function.
+        self.connected = set()
+        self._loop = asyncio.new_event_loop()
+        atexit.register(self.stop)
         self._hci_device = hci_device
         self._disconnected_callback = disconnected_callback
+
+    def wait(self, awaitable):
+        if self._loop.is_closed():
+            if hasattr(awaitable, 'close'):
+                awaitable.close()
+            raise RuntimeError('El event loop BLE de la diadema ya está cerrado')
+        return self._loop.run_until_complete(awaitable)
+
+    def pump(self, seconds=1):
+        self.wait(asyncio.sleep(seconds))
+
+    def stop(self):
+        for device in list(self.connected):
+            try:
+                device.disconnect()
+            except Exception:
+                self.connected.discard(device)
+        if not self._loop.is_closed() and not self._loop.is_running():
+            self._loop.close()
 
     def connect(self, address, retries, name=None):
         device = _HciBleakDevice(

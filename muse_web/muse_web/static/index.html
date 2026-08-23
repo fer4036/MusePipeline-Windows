@@ -71,7 +71,7 @@
 
     <section class="control-grid">
       <article class="panel">
-        <div class="panel-title"><div><h3>Preparar sesión</h3><p>Inicia ROS 2 y conecta las diademas, sin guardar todavía.</p></div></div>
+        <div class="panel-title"><div><h3>Preparar sesión</h3><p>Conecta las diademas sin guardar todavía.</p></div></div>
         <form id="session-form">
           <label>Código de prueba o participantes
             <input id="subject-code" required maxlength="64" placeholder="GRUPO-023" autocomplete="off">
@@ -81,6 +81,12 @@
           </label>
           <label>Adaptadores BLE
             <input id="hci-devices" required value="hci1,hci2,hci3,hci4" pattern="hci[0-9]+(,hci[0-9]+)*">
+          </label>
+          <label>Backend de adquisición
+            <select id="pipeline-backend">
+              <option value="standalone" selected>Python directo — recomendado para captura</option>
+              <option value="ros2">ROS 2 — integración con robot</option>
+            </select>
           </label>
           <label>Notas opcionales
             <textarea id="notes" maxlength="1000" rows="2" placeholder="Condición, incidencias o contexto"></textarea>
@@ -117,11 +123,11 @@
     <section class="diagnostic-grid">
       <article class="panel monitor">
         <div class="panel-heading-row">
-          <div class="panel-title"><div><h3>Tail del pipeline</h3><p>Últimos eventos informados por ROS 2.</p></div></div>
-          <div class="compact-actions"><button id="refresh-log" class="small-button" type="button">Actualizar tail</button><button id="graph-button" class="small-button" type="button" disabled>Ver nodos y tópicos</button></div>
+          <div class="panel-title"><div><h3>Tail del pipeline</h3><p>Últimos eventos del backend de adquisición.</p></div></div>
+          <div class="compact-actions"><button id="refresh-log" class="small-button" type="button">Actualizar tail</button><button id="graph-button" class="small-button" type="button" disabled>Ver arquitectura activa</button></div>
         </div>
         <pre id="log-output">Esperando una sesión…</pre>
-        <details class="graph-details"><summary>Grafo ROS 2</summary><pre id="graph-output">Presiona “Ver nodos y tópicos”.</pre></details>
+        <details class="graph-details"><summary>Arquitectura activa</summary><pre id="graph-output">Presiona “Ver arquitectura activa”.</pre></details>
       </article>
 
       <article class="panel preview-panel">

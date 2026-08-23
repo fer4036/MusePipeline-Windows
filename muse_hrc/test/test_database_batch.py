@@ -1,51 +1,43 @@
-"""Tests for batched telemetry persistence."""
+"""Tests for ROS-independent batched telemetry persistence."""
 
 import sqlite3
-from types import SimpleNamespace
 
-from muse_msgs.msg import EegSample, PpgSample
+from muse_hrc.models import EegSample, PpgSample
+from muse_hrc.storage import TelemetryStore
 
-from muse_hrc.database_node import DatabaseNode
+
+def memory_store(recording_enabled=True, connection=None):
+    return TelemetryStore(
+        connection=connection or sqlite3.connect(':memory:'),
+        recording_enabled=recording_enabled,
+    )
 
 
 def test_eeg_rows_are_committed_as_a_batch():
-    node = DatabaseNode.__new__(DatabaseNode)
-    node.conn = sqlite3.connect(':memory:')
-    node.cursor = node.conn.cursor()
-    node.init_database()
-    node._pending_eeg = []
-    node._pending_imu = []
-    node._pending_ppg = []
-    node._saved_eeg = 0
-    node._saved_imu = 0
-    node._saved_ppg = 0
-    node.recording_enabled = True
-    node._recording_period_id = None
-    node.get_logger = lambda: SimpleNamespace(error=lambda _message: None)
-    message = EegSample()
-    message.header.stamp.sec = 100
-    message.header.stamp.nanosec = 500_000_000
-    message.data = [1.0, 2.0, 3.0, 4.0]
+    store = memory_store()
+    sample = EegSample(
+        timestamp=100.5,
+        operator_id='operador_a',
+        data=(1.0, 2.0, 3.0, 4.0),
+    )
 
-    node.save_eeg(message, 'operador_a')
-    before_commit = node.cursor.execute(
+    store.add_eeg(sample)
+    before_commit = store.cursor.execute(
         'SELECT COUNT(*) FROM eeg_logs'
     ).fetchone()[0]
-    node._commit_batch()
-    after_commit = node.cursor.execute(
+    store.flush()
+    after_commit = store.cursor.execute(
         'SELECT COUNT(*) FROM eeg_logs'
     ).fetchone()[0]
 
     assert before_commit == 0
     assert after_commit == 1
-    assert node._saved_eeg == 1
+    assert store.metrics()['saved']['eeg'] == 1
 
 
 def test_schema_migration_and_ppg_batch():
-    node = DatabaseNode.__new__(DatabaseNode)
-    node.conn = sqlite3.connect(':memory:')
-    node.cursor = node.conn.cursor()
-    node.cursor.execute('''
+    connection = sqlite3.connect(':memory:')
+    connection.execute('''
         CREATE TABLE imu_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             operador TEXT,
@@ -55,27 +47,20 @@ def test_schema_migration_and_ppg_batch():
             gyro_z REAL
         )
     ''')
-    node.init_database()
-    node._pending_eeg = []
-    node._pending_imu = []
-    node._pending_ppg = []
-    node._saved_eeg = 0
-    node._saved_imu = 0
-    node._saved_ppg = 0
-    node.recording_enabled = True
-    node._recording_period_id = None
-    node.get_logger = lambda: SimpleNamespace(error=lambda _message: None)
-    message = PpgSample()
-    message.header.stamp.sec = 200
-    message.data = [float(index) for index in range(16)]
+    store = memory_store(connection=connection)
+    sample = PpgSample(
+        timestamp=200.0,
+        operator_id='operador_b',
+        data=tuple(float(index) for index in range(16)),
+    )
 
-    node.save_ppg(message, 'operador_b')
-    node._commit_batch()
+    store.add_ppg(sample)
+    store.flush()
 
     imu_columns = {
-        row[1] for row in node.cursor.execute('PRAGMA table_info(imu_logs)')
+        row[1] for row in store.cursor.execute('PRAGMA table_info(imu_logs)')
     }
-    ppg_row = node.cursor.execute(
+    ppg_row = store.cursor.execute(
         'SELECT operador, timestamp, channel_16 FROM ppg_logs'
     ).fetchone()
     assert {'accel_x', 'accel_y', 'accel_z'} <= imu_columns
@@ -83,22 +68,29 @@ def test_schema_migration_and_ppg_batch():
 
 
 def test_samples_are_ignored_while_recording_is_paused():
-    node = DatabaseNode.__new__(DatabaseNode)
-    node.conn = sqlite3.connect(':memory:')
-    node.cursor = node.conn.cursor()
-    node.init_database()
-    node._pending_eeg = []
-    node._pending_imu = []
-    node._pending_ppg = []
-    node._saved_eeg = 0
-    node._saved_imu = 0
-    node._saved_ppg = 0
-    node.recording_enabled = False
-    node._recording_period_id = None
-    message = EegSample()
-    message.data = [1.0, 2.0, 3.0, 4.0]
+    store = memory_store(recording_enabled=False)
+    sample = EegSample(
+        timestamp=0.0,
+        operator_id='operador_a',
+        data=(1.0, 2.0, 3.0, 4.0),
+    )
 
-    node.save_eeg(message, 'operador_a')
-    node._commit_batch()
+    assert store.add_eeg(sample) is False
+    store.flush()
 
-    assert node.cursor.execute('SELECT COUNT(*) FROM eeg_logs').fetchone()[0] == 0
+    count = store.cursor.execute('SELECT COUNT(*) FROM eeg_logs').fetchone()[0]
+    assert count == 0
+
+
+def test_recording_periods_follow_explicit_start_and_stop():
+    store = memory_store(recording_enabled=False)
+
+    assert store.set_recording(True) is True
+    assert store.set_recording(True) is False
+    assert store.set_recording(False) is True
+
+    started_at, ended_at = store.cursor.execute(
+        'SELECT started_at, ended_at FROM recording_periods'
+    ).fetchone()
+    assert started_at > 0
+    assert ended_at >= started_at

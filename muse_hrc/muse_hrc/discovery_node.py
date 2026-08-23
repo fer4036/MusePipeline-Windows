@@ -3,7 +3,6 @@ from rclpy.node import Node
 import subprocess
 import threading
 import time
-import re
 import json
 from collections import deque
 from pathlib import Path
@@ -16,46 +15,22 @@ from muse_hrc.ble_identity import (
     parse_manufacturer_ids,
     summarize_properties,
 )
+from muse_hrc.bluez import parse_hci_controllers
+from muse_hrc.device_supervisor import (
+    CONNECTING,
+    LOST,
+    SCANNING,
+    STREAMING,
+    retry_delay,
+)
 from muse_hrc.python_runtime import select_muse_python
 
-SCANNING = 'scanning'
-CONNECTING = 'connecting'
-STREAMING = 'streaming'
-LOST = 'lost'
-
-RETRY_BASE = 5.0
-RETRY_MAX = 60.0
 # Bleak uses up to 30 seconds for one GATT connection. Give the child enough
 # time to report and clean up before the parent enforces its outer timeout.
 CONNECT_TIMEOUT = 40.0
 BLUEZ_RELEASE_TIMEOUT = 3.0
 BLUEZ_RELEASE_SETTLE = 0.75
 SCAN_SECONDS = 12.0
-
-
-def parse_hci_controllers(output):
-    """Return ``{hci_name: controller_address}`` from ``hciconfig -a``."""
-    controllers = {}
-    current = None
-    for line in (output or '').splitlines():
-        header = re.match(r'^\s*(hci\d+):', line)
-        if header:
-            current = header.group(1)
-            controllers.setdefault(current, None)
-            continue
-        address = re.search(
-            r'\bBD Address:\s*((?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2})',
-            line,
-        )
-        if current and address:
-            controllers[current] = address.group(1).upper()
-    return controllers
-
-
-def retry_delay(retry_count):
-    """Return a bounded exponential delay for a failed BLE attempt."""
-    exponent = min(max(int(retry_count) - 1, 0), 4)
-    return min(RETRY_BASE * (2 ** exponent), RETRY_MAX)
 
 
 class DiademaEntry:

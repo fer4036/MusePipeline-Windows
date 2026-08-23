@@ -77,6 +77,7 @@ class StartSessionRequest(BaseModel):
     subject_code: str = Field(min_length=1, max_length=64)
     experiment: str = Field(min_length=1, max_length=80)
     hci_devices: str = Field(default='hci1,hci2', max_length=80)
+    backend: str = Field(default='ros2', pattern=r'^(ros2|standalone)$')
     notes: str = Field(default='', max_length=1000)
 
 
@@ -271,6 +272,7 @@ def start_session(payload: StartSessionRequest):
             payload.experiment,
             payload.hci_devices,
             payload.notes,
+            payload.backend,
         )
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error

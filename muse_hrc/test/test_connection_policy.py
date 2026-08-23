@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 
 from muse_hrc.discovery_node import (
     BLUEZ_RELEASE_TIMEOUT,
-    RETRY_MAX,
     DiscoveryNode,
     DiademaEntry,
     LOST,
@@ -14,7 +13,8 @@ from muse_hrc.discovery_node import (
     parse_hci_controllers,
     retry_delay,
 )
-from muse_hrc.muse_node import MuseNode
+from muse_hrc.device_supervisor import RETRY_MAX
+from muse_hrc.acquisition import MuseDeviceSession
 
 
 def test_retry_delay_is_exponential_and_bounded():
@@ -212,29 +212,17 @@ def test_scan_selects_reserved_controller_before_enabling_discovery():
     assert list(discovery._adaptadores_libres) == ['hci2']
 
 
-def test_finished_child_returns_retry_to_discovery_without_inner_loop():
-    node = object.__new__(MuseNode)
-    node._lock = threading.Lock()
-    node.streaming = False
-    node._connecting = False
-    node._shutting_down = False
-    node._lifecycle_finished = True
-    node._shutdown_requested = False
-    node._last_data_time = 0.0
-    node.muse = None
-    node.operador = 'operador_a'
-    node.hci = 'hci1'
-    node.mac = '00:55:DA:00:00:01'
-    node.get_logger = Mock()
-    node._queue_status = Mock()
-    node._flush_queues = Mock()
-    node._start_connection_thread = Mock()
-
-    with patch('muse_hrc.muse_node.rclpy.shutdown') as shutdown:
-        node._check_connection()
-
-    shutdown.assert_called_once_with()
-    node._start_connection_thread.assert_not_called()
-    node._queue_status.assert_called_once_with(
-        'retry_required', adapter='hci1', mac='00:55:DA:00:00:01'
+def test_finished_session_returns_retry_without_inner_loop():
+    session = MuseDeviceSession(
+        'operador_a',
+        '00:55:DA:00:00:01',
+        'hci1',
     )
+    with session._lock:
+        session._lifecycle_finished = True
+
+    assert session.poll() is True
+    assert session.poll() is False
+    statuses = session.drain_status()
+    assert len(statuses) == 1
+    assert statuses[0].state == 'retry_required'

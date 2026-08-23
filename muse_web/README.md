@@ -1,7 +1,8 @@
 # Muse Research Local
 
-Interfaz web local-first para preparar el pipeline ROS 2, supervisar diademas y
-controlar explícitamente los periodos de grabación desde la misma red local.
+Interfaz web local-first para preparar el pipeline con Python directo o ROS 2,
+supervisar diademas y controlar explícitamente los periodos de grabación desde
+la misma red local.
 
 ## Inicio
 
@@ -37,8 +38,9 @@ computadora; estas variables seleccionan la IP que publica la aplicación, pero
 no cambian la configuración de NetworkManager.
 
 Comparte el segundo enlace con teléfonos, tabletas o computadoras conectados a
-la misma red Wi-Fi/LAN. Sólo la computadora central necesita ROS 2, adaptadores
-Bluetooth y acceso a las diademas. No configures port forwarding en el router:
+la misma red Wi-Fi/LAN. Sólo la computadora central necesita el runtime Athena,
+adaptadores Bluetooth y acceso a las diademas. ROS 2 sólo es obligatorio cuando
+se selecciona ese backend. No configures port forwarding en el router:
 el servidor está diseñado para una red local confiable, no para Internet público.
 
 Al abrir uno de los enlaces, el servidor valida la clave y crea una cookie HttpOnly
@@ -61,7 +63,9 @@ La página tiene dos pestañas. **Operador · evaluación** es la vista inicial 
 sólo muestra el protocolo y el cuestionario. **Investigador · control del
 pipeline** contiene conexión, grabación, señales, diagnósticos y archivos.
 
-1. En la pestaña del investigador, completar código, experimento y adaptadores.
+1. En la pestaña del investigador, completar código, experimento, adaptadores y
+   backend. Usar **Python directo** para captura autónoma o **ROS 2** cuando se
+   necesite comunicación con el robot.
 2. Presionar **Preparar pipeline y conectar**. En esta etapa se reciben datos,
    pero no se guardan muestras.
 3. Confirmar que los usuarios estén en estado **Transmitiendo** y revisar sus
@@ -79,8 +83,51 @@ pipeline** contiene conexión, grabación, señales, diagnósticos y archivos.
 8. En la pestaña del investigador, presionar **Detener registro** al terminar.
    Las diademas siguen conectadas y
    se puede volver a iniciar otro intervalo dentro de la misma sesión.
-9. Presionar **Finalizar sesión y crear CSV** para detener ROS 2 y generar el
-   archivo descargable.
+9. Presionar **Finalizar sesión y crear CSV** para detener el backend y generar
+   el archivo descargable.
+
+Con Python directo, el supervisor repite el scan cada 15 segundos mientras
+exista un adaptador libre. Una Muse encendida a mitad de la sesión recibe el
+siguiente `operador_x` y se conecta sin reiniciar la captura existente. Para
+incorporarla debe existir un adaptador adicional libre; el controlador usado
+temporalmente para escanear se convierte después en su enlace dedicado.
+
+Después de cada conexión o reconexión, el supervisor reserva cinco segundos de
+estabilización antes de permitir otro enlace o scan. Una recuperación exitosa
+reinicia el backoff: una caída posterior vuelve a reintentarse desde cinco
+segundos, en vez de conservar penalizaciones de fallos anteriores. El panel
+muestra MAC, adaptador y contadores de desconexión/reconexión para comprobar que
+la identidad `operador_x` no cambie durante la sesión.
+
+Si una diadema asignada se apaga, el supervisor no intenta abrir inmediatamente
+una conexión GATT larga. Primero comprueba con un scan corto que la misma MAC
+volvió a anunciarse en su adaptador dedicado. Mientras no aparezca, muestra
+**Esperando diadema** y repite la comprobación cada 15 segundos sin perturbar
+los streams de los demás operadores.
+
+En modo Python directo, reiniciar solamente el servidor web tampoco termina el
+colector. Al volver a iniciar la página, ésta recupera la sesión mediante
+`metadata.json` después de validar PID, comando, base de datos y archivo de
+control. Para cerrar realmente la adquisición y crear los CSV se debe usar
+**Finalizar sesión y crear CSV**.
+
+## Estabilidad de adaptadores Bluetooth USB
+
+El arranque advierte en `pipeline.log` si Linux mantiene un adaptador con
+`power/control=auto`. Para estaciones de adquisición conectadas a corriente se
+recomienda desactivar permanentemente la autosuspensión de `btusb`:
+
+```bash
+echo 'options btusb enable_autosuspend=0' | \
+  sudo tee /etc/modprobe.d/btusb-no-autosuspend.conf
+sudo reboot
+```
+
+Esto afecta a los controladores Bluetooth USB de la computadora y aumenta
+ligeramente su consumo. No se aplica automáticamente desde la página porque
+requiere privilegios administrativos. Para cuatro radios simultáneos, usa un
+hub alimentado, evita encadenar hubs y separa físicamente los dongles mediante
+extensiones USB cortas para reducir interferencia en 2.4 GHz.
 
 No se puede iniciar un paso si la grabación Muse está detenida ni detener la
 grabación mientras algún operador mantiene un paso abierto. Para cada operador,
@@ -98,7 +145,8 @@ de `workshop_sections` permite saber si esa ventana atravesó un cambio de paso.
 
 Las tablas `workshop_sections` y `ground_truth_responses` guardan tiempos Unix
 en segundos obtenidos de `CLOCK_REALTIME`, la misma referencia temporal usada
-por los timestamps de recepción publicados en ROS. La participación se valida
+por los timestamps del núcleo y, cuando aplica, publicados en ROS. La
+participación se valida
 además mediante el avance de identificadores de filas EEG durante cada ventana,
 por lo que no depende únicamente del reloj reportado por la diadema. Cada
 etiqueta incluye:

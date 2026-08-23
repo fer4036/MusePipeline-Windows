@@ -2,7 +2,7 @@
 
 **Estado documentado:** agosto de 2026  
 **Plataforma actual:** Ubuntu 22.04, ROS 2 Humble, BlueZ y Muse S Athena  
-**Plataforma objetivo aprobada:** Raspberry Pi 5, Ubuntu 24.04 ARM64, ROS 2 Jazzy y SSD NVMe  
+**Plataforma objetivo aprobada:** Raspberry Pi 5, Ubuntu 24.04 ARM64, ROS 2 Jazzy y microSD
 **Ubicación del proyecto:** `/home/fernanda/muse`  
 **Alcance:** adquisición local simultánea de EEG, IMU y PPG desde varias diademas Muse
 
@@ -51,13 +51,20 @@ El sistema **no calcula todavía frecuencia cardiaca en BPM ni HRV**. El PPG con
 materia prima para hacerlo, pero el procesamiento fisiológico debe implementarse y
 validarse por separado.
 
-La arquitectura usa ROS 2 para separar responsabilidades:
+La ruta operativa estable usa ROS 2 para separar responsabilidades:
 
 - `auto_discovery` encuentra diademas y administra adaptadores Bluetooth.
 - Un nodo `muse_operador_x` por diadema decodifica y publica sus señales.
 - `central_database` se suscribe dinámicamente y persiste los datos.
 - La aplicación web local prepara sesiones, inicia o detiene la grabación, muestra
   usuarios y métricas, y genera el archivo de entrega.
+
+Desde agosto de 2026, adquisición y persistencia ya no están implementadas directamente
+como lógica ROS. El núcleo usa clases Python puras para representar EEG, IMU, PPG,
+estado BLE y almacenamiento SQLite. `muse_node` y `database_node` se conservan como
+adaptadores opcionales que convierten esas clases a mensajes y servicios ROS. También
+existe un colector de terminal sin ROS. La GUI y el descubrimiento automático todavía
+usan la ruta ROS en esta primera etapa de migración.
 
 Los datos no se envían a Supabase ni a otro servicio en la nube. Durante la captura se
 guardan en SQLite, porque una base transaccional es más segura frente a interrupciones
@@ -295,6 +302,40 @@ adoptó `muselsl` con soporte Athena.
 | Interfaz de operación | Implementada | FastAPI y frontend accesible en la LAN con claves por rol |
 | Inicio/detención manual de registro | Implementada | No desconecta las diademas |
 
+### 6.4 Primera etapa para hacer ROS 2 opcional
+
+La colaboración humano-robot futura sí puede beneficiarse de ROS 2, pero la captura de
+señales no debe dejar de funcionar si ROS no está instalado. Para evitar mantener dos
+implementaciones distintas, se introdujo una arquitectura de núcleo y adaptadores:
+
+| Componente nuevo | Responsabilidad | Dependencia de ROS |
+|---|---|---|
+| `models.py` | Contratos Python inmutables para EEG, IMU, PPG y estado | Ninguna |
+| `acquisition.py` | Conexión Athena, unidades SI, timestamps, colas, métricas, timeout y ciclo BLE | Ninguna |
+| `storage.py` | Puerta de grabación, lotes, periodos y esquema SQLite | Ninguna |
+| `bluez.py` | Inventario HCI, scan por controlador, propiedades BLE y preparación del enlace | Ninguna |
+| `device_supervisor.py` | Identidad MAC--operador, pool HCI y política de reintento | Ninguna |
+| `auto_discovery.py` | Composición de BlueZ, registro y asignación automática | Ninguna |
+| `standalone.py` | Sesiones directas, hot-add, control por archivo y persistencia | Ninguna |
+| `muse_node.py` | Conversión de modelos Python a mensajes y tópicos ROS | Sí, opcional |
+| `database_node.py` | Conversión de mensajes ROS a modelos y servicio de grabación | Sí, opcional |
+
+Los contratos internos son ahora la fuente de verdad. Los mensajes ROS dejaron de ser
+los objetos construidos por el decoder BLE. Esto permitirá incorporar un adaptador
+WebSocket, MQTT o IPC para la Raspberry sin modificar la decodificación ni la base de
+datos, y conservar ROS para publicar el estado cognitivo hacia un robot cuando se
+necesite.
+
+Esta etapa conserva el esquema SQLite, nombres de tópicos, servicio `set_recording`,
+estados JSON y política de reintento del pipeline validado. El colector sin ROS ya puede
+recibir sólo la lista de adaptadores: descubre Muse por propiedades BLE, asigna
+`operador_a`, `operador_b`, etc., y dedica un `hci` a cada una. La entrada manual
+operador--MAC--adaptador permanece disponible para diagnóstico. `SessionManager` y la
+GUI ya permiten elegir `standalone` o `ros2`. En modo standalone, la GUI escribe una
+orden JSON privada y espera su acuse antes de cambiar el estado de grabación. Mientras
+quede un adaptador libre, el supervisor repite el scan cada 15 segundos e incorpora una
+Muse encendida a mitad de la sesión sin detener las existentes.
+
 ---
 
 ## 7. Arquitectura actual de extremo a extremo
@@ -345,9 +386,10 @@ adoptó `muselsl` con soporte Athena.
 
 1. **Capa física:** diademas y adaptadores USB.
 2. **Capa BLE:** BlueZ, `bluetoothctl`, Bleak y GATT Athena.
-3. **Capa de adquisición:** un `muse_node` por diadema.
-4. **Capa de comunicación:** tópicos y servicio ROS 2.
-5. **Capa de persistencia:** `central_database` y SQLite.
+3. **Núcleo de adquisición:** `MuseDeviceSession`, independiente del transporte.
+4. **Capa de comunicación:** adaptador ROS 2 actual o colector Python directo.
+5. **Capa de persistencia:** `TelemetryStore` y SQLite; `central_database` es su
+   adaptador ROS.
 6. **Capa de operación:** servidor FastAPI y página web en la red local.
 7. **Capa de entrega:** metadatos, log, SQLite original y CSV exportado.
 
@@ -361,7 +403,7 @@ adoptó `muselsl` con soporte Athena.
 | `muse_hrc` | Descubrimiento BLE, adaptación Athena, nodos de señal y base de datos |
 | `muse_web` | Gestión de sesiones, API local, GUI y exportadores |
 | `requirements_athena.txt` | Fija la revisión de `muselsl` usada para Athena |
-| `muse_env` externo al workspace | Runtime Python que debe importar `rclpy` y `muselsl.athena` |
+| `muse_env` externo al workspace | Runtime Athena; `rclpy` sólo es obligatorio con ROS |
 | `web_env` | Entorno de FastAPI/Uvicorn y dependencias web |
 | `build`, `install`, `log` | Artefactos generados por `colcon` y pruebas ROS 2 |
 
@@ -880,8 +922,10 @@ todo el contenido histórico de la base.
 
 ### 15.1 Objetivo
 
-La GUI traduce operaciones de terminal a controles comprensibles. No sustituye ROS 2;
-lo inicia, consulta y controla mediante procesos y servicios locales.
+La GUI traduce operaciones de terminal a controles comprensibles y permite elegir dos
+backends. **Python directo** ejecuta adquisición, hot-add y SQLite sin ROS 2. **ROS 2**
+conserva tópicos y servicios para integración futura con el robot. Ambos producen el
+mismo esquema de sesión, estados, preview y CSV.
 
 ### 15.2 Servidor
 
@@ -978,15 +1022,16 @@ tanto en metadatos JSON como en `recording_periods` de SQLite.
 | `POST /api/recording/start` | Activar persistencia |
 | `POST /api/recording/stop` | Pausar persistencia |
 | `GET /api/database/preview` | Preview fijo y de sólo lectura |
-| `POST /api/topic/hz` | Medición temporal de un tópico validado |
-| `GET /api/ros/graph` | Nodos y tópicos tipados |
+| `POST /api/topic/hz` | Tasa ROS medida o métrica del núcleo standalone |
+| `GET /api/ros/graph` | Grafo ROS o streams Python del backend activo |
 | `POST /api/session/export` | Regenerar CSV |
 | `GET /api/session/{name}/csv/{operator}/{profile}` | Descargar perfil `muse` o `complete` |
 
 ### 15.6 Lectura del estado de usuarios
 
-La GUI no se suscribe directamente a ROS. Lee hasta los últimos 2 MB de `pipeline.log`,
-busca líneas `MUSE_STATUS_JSON` y reconstruye el estado más reciente por operador.
+La GUI no se acopla directamente al transporte. Lee hasta los últimos 2 MB de
+`pipeline.log`, busca líneas `MUSE_STATUS_JSON` producidas por cualquiera de los dos
+backends y reconstruye el estado más reciente por operador.
 
 Las métricas periódicas repiten `streaming` y `connected_since`, por lo que la GUI puede
 recuperar estado aunque la primera línea de conexión ya no esté en esa ventana.
@@ -1011,7 +1056,12 @@ Al finalizar, el gestor intenta:
 5. actualizar metadatos;
 6. exportar CSV.
 
-Al cerrar el servidor web, `shutdown()` finaliza y exporta una sesión que siga activa.
+En backend ROS 2, cerrar el servidor web conserva el comportamiento de terminación
+segura. En backend Python directo, el colector queda vivo al cerrar o reiniciar la GUI:
+la nueva instancia verifica el PID, el comando, `raw.sqlite` y `control.json` antes de
+volver a adjuntarse. El cierre y la exportación intencionales se realizan con el botón de
+finalización de sesión. Un PID existente con otro comando se rechaza para evitar enviar
+señales a un proceso no relacionado.
 
 ---
 
@@ -1022,17 +1072,16 @@ Al cerrar el servidor web, `shutdown()` finaliza y exporta una sesión que siga 
 ```text
 Usuario pulsa PREPARAR
         ↓
-GUI crea directorio y lanza ROS 2 con recording=false
+GUI crea directorio y lanza el backend elegido con recording=false
         ↓
-auto_discovery valida hci y escanea BLE
+el supervisor valida hci y escanea BLE
         ↓
 identifica Muse, asigna operador y adaptador
         ↓
-muse_node conecta, decodifica y publica
+MuseDeviceSession conecta y decodifica
         ↓
-central_database crea suscripciones
-        ↓
-mensajes llegan, pero los callbacks no los insertan
+ROS publica hacia central_database o standalone escribe directo;
+en ambos casos la puerta de grabación descarta las muestras
         ↓
 GUI muestra streaming, Hz, batería y tiempo conectado
 ```
@@ -1196,6 +1245,17 @@ ausencia de EEG, la supervisión del proceso hijo, el backoff coordinado y la re
 de adaptadores retirados y reinsertados. Las pruebas posteriores confirmaron reconexión,
 pero todavía falta una campaña cuantitativa de cuatro diademas para estimar tasa de falla.
 
+Una prueba posterior reveló una caída correlacionada: al apagar `operador_a`, el intento
+GATT directo de 30 segundos hacia una MAC que ya no anunciaba coincidió, unos ocho
+segundos después, con la pérdida de `operador_c` y también de otro enlace activo. La
+asignación operador--MAC no había cambiado. El diagnóstico apunta a contención o bloqueo
+de BlueZ durante el intento largo contra un dispositivo ausente, no a una reasignación de
+identidad. La reconexión ahora se divide en dos fases: primero se verifica durante un
+escaneo corto que la MAC exacta reapareció en el adaptador que ya tenía asignado; sólo
+después se abre GATT. Mientras la diadema permanezca apagada se informa
+`waiting_for_device` y se repite la presencia cada 15 segundos, sin perturbar los demás
+enlaces.
+
 ### 19.2 Cobertura automatizada
 
 La suite automatizada cubre:
@@ -1253,7 +1313,8 @@ Las pruebas automatizadas no reemplazan:
 ### 20.2 Técnicas
 
 - La batería depende de un atributo privado de `muselsl`.
-- El estado de la GUI se reconstruye desde log, no mediante una conexión ROS directa.
+- El estado de la GUI se reconstruye desde log, no mediante una conexión directa al
+  backend.
 - El scan se detiene cuando no hay adaptadores libres.
 - La columna EEG `channel_5` es herencia de esquema y siempre vale cero con Athena.
 - No existen índices SQL adicionales a las claves primarias.
@@ -1310,6 +1371,10 @@ Las bases históricas deben auditarse: una sesión presenta timestamps comprimid
 5. Publicar un mensaje de estado tipado en lugar de JSON para consumidores ROS.
 6. Documentar y fijar versiones de firmware, BlueZ, Bleak y `muselsl`.
 7. Actualizar metadatos de paquete, versión y licencia.
+8. Probar físicamente el hot-add durante una captura larga y medir si el scan afecta los
+   streams existentes.
+9. Reutilizar gradualmente el backend BlueZ puro dentro del adaptador ROS después de una
+   prueba física comparativa, sin reemplazar de golpe el supervisor estable.
 
 ### Prioridad de investigación
 
@@ -1367,7 +1432,30 @@ ros2 launch muse_hrc muse_system.launch.py \
 Este modo graba inmediatamente en `~/muse_telemetry.db`, salvo que se pase
 `recording_enabled:=false`.
 
-### 22.3 Diagnóstico manual
+### 22.3 Colector inicial sin ROS 2
+
+Después de instalar `muse_hrc` y Athena dentro de un entorno Python, la captura directa
+no requiere importar ni iniciar ROS:
+
+```bash
+source /home/fernanda/muse_env/bin/activate
+cd /home/fernanda/muse
+pip install -e ./muse_hrc
+
+muse_collect \
+  --hci-devices hci1,hci2,hci3,hci4 \
+  --db /home/fernanda/muse_telemetry.db
+```
+
+El comando descubre automáticamente las Muse visibles, las conecta en secuencia,
+escribe las mismas tablas SQLite, emite estados JSON y aplica backoff coordinado. Repite
+el scan cada 15 segundos si queda un adaptador libre, por lo que puede agregar diademas
+durante la sesión. Para diagnóstico sigue disponible
+`--device operador_a,MAC,hci1`, repetible. La GUI usa el mismo colector al elegir
+**Python directo** y añade `--paused` y `--control-file` para gobernar la grabación con
+confirmación.
+
+### 22.4 Diagnóstico manual
 
 ```bash
 ros2 node list
@@ -1423,8 +1511,15 @@ que ROS 2 conozca los mensajes `muse_msgs`.
 | `muse_hrc/muse_hrc/python_runtime.py` | Selección de intérprete Athena |
 | `muse_hrc/muse_hrc/athena_adapter.py` | Backend Bleak fijado a `hci` |
 | `muse_hrc/muse_hrc/athena_protocol.py` | Reloj local y espaciado temporal por lote |
-| `muse_hrc/muse_hrc/muse_node.py` | Decodificación, publicación y reconexión |
-| `muse_hrc/muse_hrc/database_node.py` | Puerta de grabación y SQLite |
+| `muse_hrc/muse_hrc/models.py` | Contratos Python independientes de ROS |
+| `muse_hrc/muse_hrc/acquisition.py` | Decodificación, colas y ciclo BLE sin ROS |
+| `muse_hrc/muse_hrc/storage.py` | Grabación y SQLite sin ROS |
+| `muse_hrc/muse_hrc/bluez.py` | Inventario, scan y preparación BlueZ sin ROS |
+| `muse_hrc/muse_hrc/device_supervisor.py` | Identidad, pool HCI y reintentos sin ROS |
+| `muse_hrc/muse_hrc/auto_discovery.py` | Descubrimiento y asignación automática sin ROS |
+| `muse_hrc/muse_hrc/standalone.py` | Colector de terminal sin ROS |
+| `muse_hrc/muse_hrc/muse_node.py` | Adaptador de adquisición a tópicos ROS |
+| `muse_hrc/muse_hrc/database_node.py` | Adaptador ROS del almacenamiento |
 | `muse_msgs/msg/EegSample.msg` | Contrato EEG |
 | `muse_msgs/msg/PpgSample.msg` | Contrato PPG |
 | `muse_web/muse_web/session_manager.py` | Ciclo de vida de sesiones |
@@ -1472,6 +1567,7 @@ La versión que se guardará en el repositorio tiene las siguientes capacidades:
 - pool de adaptadores y asignación dedicada por diadema;
 - identidad de operador estable durante la sesión;
 - detección de pérdida, reconexión y backoff;
+- reconexión condicionada a presencia de la misma MAC en el mismo adaptador;
 - conexión separada de la decisión de grabar;
 - SQLite local transaccional con WAL y lotes;
 - sesiones independientes, múltiples intervalos y dos perfiles CSV por operador;
@@ -1479,6 +1575,8 @@ La versión que se guardará en el repositorio tiene las siguientes capacidades:
 - escala Likert recurrente cada diez minutos, asociada a operador y sección;
 - preview, tasas de tópicos, grafo ROS y tail de diagnóstico;
 - claves persistentes para uso LAN y alias mDNS configurable.
+- recuperación de una sesión Python viva después de reiniciar la GUI, con validación
+  contra reutilización del PID.
 
 No deben interpretarse como terminadas la distribución por Internet, la migración ARM64,
 el cálculo de frecuencia cardiaca/HRV, la validación científica de sincronía ni la prueba
@@ -1488,10 +1586,14 @@ de aceptación con cuatro Muse durante varias horas.
 
 ### 26.1 Decisión de plataforma
 
-La plataforma objetivo será una **Raspberry Pi 5 con SSD NVMe**, hub USB alimentado,
-fuente adecuada y refrigeración activa. Se propone Ubuntu Server 24.04 ARM64 y ROS 2
-Jazzy. No se considera la Pi una simple computadora más: será un dispositivo de borde
-administrado por el proyecto y transportable entre laboratorios.
+La plataforma objetivo será una **Raspberry Pi 5 con microSD**, hub USB alimentado,
+fuente adecuada y refrigeración activa. Se recomienda una tarjeta de al menos 32 GB,
+clase A2 y de alta resistencia; la tarjeta disponible de más de 16 GB puede servir para
+el prototipo si el espacio libre y la velocidad se verifican antes de cada campaña. Un
+SSD NVMe queda como mejora opcional para mayor capacidad y resistencia de escritura. Se
+propone Ubuntu Server 24.04 ARM64 y ROS 2 Jazzy. No se considera la Pi una simple
+computadora más: será un dispositivo de borde administrado por el proyecto y
+transportable entre laboratorios.
 
 Se eligió Pi 5 + Jazzy en lugar de adquirir una Pi anterior para conservar Humble porque:
 
@@ -1500,8 +1602,8 @@ Se eligió Pi 5 + Jazzy en lugar de adquirir una Pi anterior para conservar Humb
 - proporciona mayor margen para cuatro procesos BLE, ROS, SQLite y supervisión;
 - evita iniciar una distribución nueva sobre Ubuntu 22.04/Humble próximos al final de su
   periodo de soporte estándar;
-- NVMe reduce el riesgo y la variabilidad de escritura respecto de usar microSD como
-  almacenamiento principal de sesiones.
+- la microSD permite comenzar sin hardware adicional, pero requiere vigilar espacio,
+  temperatura, tasa de escritura y copias de seguridad por su menor resistencia.
 
 ### 26.2 Arquitectura objetivo
 
@@ -1515,7 +1617,7 @@ Navegador investigador ─ HTTPS ───┘            │
                                    ├── BlueZ y adaptadores USB
                                    ├── adquisición Muse Athena
                                    ├── ROS 2 Jazzy
-                                   ├── SQLite en SSD NVMe
+                                   ├── SQLite en microSD local
                                    └── CSV local por operador
 ```
 
@@ -1547,8 +1649,9 @@ necesitará una conexión saliente al servicio público.
 5. Escalar progresivamente a dos y cuatro adaptadores.
 6. Resolver controladores por identidad estable y no sólo por número `hciN`.
 7. Ejecutar pruebas de dos horas, pérdida de Wi-Fi, hotplug, reinicio y corte de energía.
-8. Separar el daemon de adquisición del servidor web para que una caída de Internet no
-   detenga ROS ni SQLite.
+8. Completar la separación del daemon de adquisición y el servidor web. La primera base
+   ya está implementada: el colector Python sobrevive al reinicio de la GUI y ésta puede
+   recuperar su sesión local verificada.
 9. Implementar agente WSS autenticado, registro de dispositivo y cola offline.
 10. Publicar GUI HTTPS con identidades individuales, roles, auditoría y expiración.
 11. Mantener CSV local y habilitar descarga remota sólo bajo autorización.
@@ -1567,6 +1670,20 @@ necesitará una conexión saliente al servicio público.
 - una imagen nueva de Raspberry puede reproducirse desde documentación y versiones
   bloqueadas.
 
+### 26.6 Inicio de la validación Raspberry
+
+La rama `feature/rasp-pi5-edge` ya contiene el arnés de despliegue inicial en
+`deploy/raspberry_pi`: diagnóstico de arquitectura, sistema operativo, espacio, reloj,
+controladores BlueZ, topología USB y autosuspensión; instalador aislado del runtime
+Python; procedimiento SSH; y matriz de evidencia ARM64. El instalador no incorpora ROS
+2 todavía: la primera prueba debe validar una Muse con BlueZ, Athena, SQLite y la GUI en
+modo `standalone`, antes de añadir Jazzy.
+
+Esta preparación fue verificada sintácticamente en la computadora `fer`, que continúa
+siendo Ubuntu 22.04 x86_64. Por tanto, la ejecución física ARM64 permanece pendiente y
+no debe reportarse como aprobada hasta correr el preflight y las pruebas BLE en la
+Raspberry Pi 5.
+
 ## 27. Conclusión
 
 El pipeline evolucionó de una conexión EEG individual operada por terminal a un sistema
@@ -1583,7 +1700,7 @@ dependencia de direccionamiento local y de las políticas de la Wi-Fi sigue sien
 limitación del despliegue actual, no de la adquisición BLE.
 
 La siguiente etapa será convertir la adquisición en un servicio de borde sobre Raspberry
-Pi 5 y SSD NVMe, migrar a ROS 2 Jazzy y separar la GUI pública del proceso que controla
+Pi 5 y microSD, migrar a ROS 2 Jazzy y separar la GUI pública del proceso que controla
 las diademas. Con ello las computadoras del taller podrán mantener su Ethernet estático
 para uFactory y acceder por Internet a la interfaz, mientras la captura continúa local y
 resistente a interrupciones de red.
