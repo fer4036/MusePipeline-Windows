@@ -1,0 +1,1 @@
+git+https://github.com/alexandrebarachant/muse-lsl.git@042881f2ed698778acafec638cc879ef6a6e5eb4

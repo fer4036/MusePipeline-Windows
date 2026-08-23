@@ -1,0 +1,47 @@
+# ROS 2 / colcon generated artifacts
+build/
+install/
+log/
+
+# Python environments and caches
+web_env/
+muse_env/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Session data and sensitive research outputs
+MuseResearch/
+sessions/
+recovery/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.csv
+*.xlsx
+*.xls
+*.log
+
+# Local credentials and configuration
+.env
+.env.*
+!.env.example
+access.json
+*.pem
+*.key
+*.crt
+
+# Editor and operating-system artifacts
+.vscode/browse.vc.db*
+.idea/
+.DS_Store
+Thumbs.db
+
+# Codex/agent local metadata
+.codex/
+.agents/

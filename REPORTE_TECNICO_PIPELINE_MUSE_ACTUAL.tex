@@ -1,0 +1,1732 @@
+\documentclass[11pt,a4paper]{article}
+
+% Compatible con pdfLaTeX, XeLaTeX y LuaLaTeX.
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{lmodern}
+  \DeclareUnicodeCharacter{00BF}{\textquestiondown}
+  \DeclareUnicodeCharacter{00D7}{\ensuremath{\times}}
+  \DeclareUnicodeCharacter{00B2}{\textsuperscript{2}}
+  \DeclareUnicodeCharacter{2013}{\textendash}
+  \DeclareUnicodeCharacter{2014}{\textemdash}
+  \DeclareUnicodeCharacter{201C}{``}
+  \DeclareUnicodeCharacter{201D}{''}
+  \DeclareUnicodeCharacter{2192}{\ensuremath{\rightarrow}}
+  \DeclareUnicodeCharacter{2193}{\ensuremath{\downarrow}}
+  \DeclareUnicodeCharacter{2500}{-}
+  \DeclareUnicodeCharacter{2502}{|}
+  \DeclareUnicodeCharacter{250C}{+}
+  \DeclareUnicodeCharacter{2510}{+}
+  \DeclareUnicodeCharacter{2514}{+}
+  \DeclareUnicodeCharacter{2518}{+}
+  \DeclareUnicodeCharacter{252C}{+}
+  \DeclareUnicodeCharacter{2534}{+}
+  \DeclareUnicodeCharacter{253C}{+}
+  \DeclareUnicodeCharacter{25B2}{\ensuremath{\blacktriangle}}
+  \DeclareUnicodeCharacter{25BA}{\ensuremath{\blacktriangleright}}
+  \DeclareUnicodeCharacter{25BC}{\ensuremath{\blacktriangledown}}
+  \DeclareUnicodeCharacter{25C4}{\ensuremath{\blacktriangleleft}}
+\else
+  \usepackage{fontspec}
+  \defaultfontfeatures{Ligatures=TeX}
+  \IfFontExistsTF{Libertinus Serif}
+    {\setmainfont{Libertinus Serif}}
+    {\setmainfont{Latin Modern Roman}}
+  \IfFontExistsTF{DejaVu Sans Mono}
+    {\setmonofont{DejaVu Sans Mono}[Scale=0.82]}
+    {\setmonofont{Latin Modern Mono}[Scale=0.82]}
+\fi
+\usepackage{amssymb}
+\usepackage[spanish,es-nodecimaldot]{babel}
+\usepackage[a4paper,margin=2.4cm]{geometry}
+\usepackage{microtype}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{fvextra}
+\usepackage{upquote}
+
+\definecolor{MuseGreen}{HTML}{0B7458}
+\definecolor{MuseDark}{HTML}{15231F}
+\definecolor{MuseLight}{HTML}{EAF2EE}
+\definecolor{CodeBackground}{HTML}{F4F6F5}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=MuseGreen,
+  urlcolor=MuseGreen,
+  citecolor=MuseGreen,
+  pdftitle={Reporte técnico integral del pipeline Muse Research},
+  pdfauthor={Proyecto Muse Research}
+}
+
+\setstretch{1.08}
+\setlength{\parindent}{0pt}
+\setlength{\LTpre}{0.5em}
+\setlength{\LTpost}{1em}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\renewcommand{\arraystretch}{1.22}
+\setlist{nosep,leftmargin=1.8em,topsep=0.45em}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{2}
+\titleformat{\section}{\Large\bfseries\color{MuseDark}}{}{0pt}{}
+\titleformat{\subsection}{\large\bfseries\color{MuseGreen}}{}{0pt}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{MuseDark}}{}{0pt}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Muse Research}
+\fancyhead[R]{\small Reporte técnico del pipeline}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\DefineVerbatimEnvironment{MuseCode}{Verbatim}{
+  breaklines=true,
+  breakanywhere=true,
+  fontsize=\small,
+  frame=single,
+  framesep=3mm,
+  rulecolor=\color{MuseGreen},
+  bgcolor=CodeBackground
+}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{2.5cm}
+  {\color{MuseGreen}\rule{\textwidth}{1.2pt}}\\[1.2cm]
+  {\Huge\bfseries Reporte técnico integral\\[0.25cm]
+   del pipeline Muse Research\par}
+  \vspace{1cm}
+  {\Large Adquisición local multimodal con Muse S Athena\par}
+  \vspace{1.4cm}
+  {\large EEG, IMU y PPG mediante BLE, ROS 2, SQLite y una GUI web en red local\par}
+  \vfill
+  \begin{tabular}{rl}
+    \textbf{Estado documentado:} & agosto de 2026 \\
+    \textbf{Plataforma:} & Ubuntu 22.04 y ROS 2 Humble \\
+    \textbf{Proyecto:} & Muse Research
+  \end{tabular}
+  \vfill
+  {\color{MuseGreen}\rule{\textwidth}{1.2pt}}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+\textbf{Estado documentado:} agosto de 2026 \textbf{Plataforma:} Ubuntu 22.04, ROS 2 Humble, BlueZ y Muse S Athena \textbf{Ubicación del proyecto:} {\ttfamily\small /home/fernanda/muse} \textbf{Alcance:} adquisición local multiusuario de EEG, IMU y PPG, ground truth por sección y operación web dentro de la LAN
+
+\medskip\hrule\medskip
+
+\section{Propósito de este documento}
+
+Este reporte explica el pipeline completo sin asumir que la persona lectora conoce el proyecto, electroencefalografía, Bluetooth Low Energy, ROS 2, bases de datos o programación. Al mismo tiempo, conserva los detalles necesarios para que un perfil técnico pueda entender, mantener, auditar y extender la implementación.
+
+El documento responde cinco preguntas principales:
+
+\begin{enumerate}
+\item ¿Qué problema científico y operativo resuelve el sistema?
+\item ¿Cómo se transportan los datos desde una diadema física hasta un archivo local?
+\item ¿Qué cambió respecto de la arquitectura inicial y por qué?
+\item ¿Qué hace exactamente cada nodo, tópico, servicio y componente web?
+\item ¿Qué capacidades están terminadas y qué limitaciones siguen abiertas?
+\end{enumerate}
+
+La descripción se basa en el código presente en el workspace en agosto de 2026. No describe una arquitectura ideal futura: distingue explícitamente entre funciones implementadas, funciones heredadas y funciones todavía pendientes.
+
+\medskip\hrule\medskip
+
+\section{Resumen ejecutivo}
+
+Muse Research es una plataforma local de adquisición multimodal. Su función es conectar una o varias diademas Muse S con firmware Athena, recibir sus señales en tiempo real, identificar a cada diadema como un operador dentro de una sesión, supervisar la calidad operativa del enlace y guardar únicamente los intervalos que el equipo de investigación decida registrar.
+
+El sistema actual adquiere tres familias de datos:
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.225\textwidth}>{\raggedright\arraybackslash}p{0.225\textwidth}>{\raggedright\arraybackslash}p{0.225\textwidth}>{\raggedright\arraybackslash}p{0.225\textwidth}@{}}
+\toprule
+\textbf{Señal} & \textbf{Qué representa} & \textbf{Frecuencia nominal} & \textbf{Contenido actual} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Señal} & \textbf{Qué representa} & \textbf{Frecuencia nominal} & \textbf{Contenido actual} \\
+\midrule
+\endhead
+EEG & Diferencias de potencial eléctrico medidas en el cuero cabelludo & 256 muestras/s & 4 canales: TP9, AF7, AF8 y TP10 \\
+IMU & Movimiento de la cabeza & 52 muestras/s & Acelerómetro de 3 ejes y giroscopio de 3 ejes \\
+PPG & Intensidad óptica reflejada por el tejido & 64 muestras/s & 16 canales ópticos crudos \\
+\bottomrule
+\end{longtable}
+
+El sistema \textbf{no calcula todavía frecuencia cardiaca en BPM ni HRV}. El PPG contiene la materia prima para hacerlo, pero el procesamiento fisiológico debe implementarse y validarse por separado.
+
+La arquitectura usa ROS 2 para separar responsabilidades:
+
+\begin{itemize}
+\item {\ttfamily\small auto\_discovery} encuentra diademas y administra adaptadores Bluetooth.
+\item Un nodo {\ttfamily\small muse\_operador\_x} por diadema decodifica y publica sus señales.
+\item {\ttfamily\small central\_database} se suscribe dinámicamente y persiste los datos.
+\item La aplicación web accesible desde la red local prepara sesiones, inicia o detiene
+la grabación, muestra usuarios y métricas, coordina el taller y genera los archivos de entrega.
+
+\end{itemize}
+
+Los datos no se envían a Supabase ni a otro servicio en la nube. Durante la captura se guardan en SQLite, porque una base transaccional es más segura frente a interrupciones que escribir directamente un archivo de texto. Al finalizar se producen dos CSV por usuario: uno estrictamente Muse y otro completo con workshop y Likert. Todos permanecen en la computadora local.
+
+\medskip\hrule\medskip
+
+\section{Objetivos del proyecto}
+
+\subsection{Objetivo principal}
+
+Proporcionar un medio reproducible y suficientemente robusto para recolectar señales fisiológicas y de movimiento de varias personas durante experimentos de interacción humano-robot, carga cognitiva u otras tareas experimentales.
+
+\subsection{Objetivos funcionales}
+
+\begin{itemize}
+\item Conectar varias diademas simultáneamente.
+\item Evitar escribir manualmente una dirección MAC en cada prueba.
+\item Dedicar un adaptador Bluetooth a cada diadema conectada.
+\item Conservar la identidad {\ttfamily\small operador\_a}, {\ttfamily\small operador\_b}, etc. cuando una diadema se
+desconecta y reconecta dentro de la misma sesión.
+
+\item Detectar caídas de conexión y reintentar sin intervención manual.
+\item Transportar EEG, IMU y PPG con marcas de tiempo y tipos de mensaje explícitos.
+\item Permitir que las diademas se conecten antes de comenzar el experimento.
+\item Separar “estar transmitiendo” de “estar guardando”.
+\item Guardar sólo los intervalos seleccionados por la persona investigadora.
+\item Registrar cada 10 minutos el ground truth de engagement cognitivo situacional,
+sin depender de un cambio de sección y con timestamps alineados con las señales Muse.
+\item Permitir que cada operador avance y responda de forma independiente, sin esperar
+a los demás participantes.
+\item Mantener los datos sensibles en almacenamiento local.
+\item Permitir supervisión sin exigir conocimientos de terminal o ROS 2.
+\item Conservar herramientas técnicas de diagnóstico para el equipo de desarrollo.
+\end{itemize}
+
+\subsection{Uso científico previsto}
+
+El reporte inicial del proyecto plantea análisis posteriores como:
+
+\begin{itemize}
+\item extracción de potencia por bandas EEG y clasificación con Random Forest o SVM;
+\item clasificación de señal cruda mediante EEGNet;
+\item evaluación Leave-One-Subject-Out y aumento de datos;
+\item interpretabilidad mediante SHAP o Grad-CAM;
+\item fusión futura de EEG con métricas derivadas de PPG, como frecuencia cardiaca y HRV.
+\end{itemize}
+
+Es importante separar adquisición y análisis: \textbf{el pipeline actual recolecta y organiza señales; no entrena modelos, no clasifica estados cognitivos y no calcula HRV}.
+
+\medskip\hrule\medskip
+
+\section{Conceptos científicos básicos}
+
+\subsection{Qué es EEG}
+
+EEG significa electroencefalografía. Una diadema EEG utiliza electrodos para medir diferencias de potencial muy pequeñas en la superficie de la cabeza. Estas variaciones se expresan habitualmente en microvoltios.
+
+La Muse Athena entrega cuatro canales EEG con el siguiente orden:
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}@{}}
+\toprule
+\textbf{Índice} & \textbf{Canal} & \textbf{Ubicación aproximada} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Índice} & \textbf{Canal} & \textbf{Ubicación aproximada} \\
+\midrule
+\endhead
+1 & TP9 & Zona temporoparietal izquierda, cerca de la oreja \\
+2 & AF7 & Zona frontal izquierda \\
+3 & AF8 & Zona frontal derecha \\
+4 & TP10 & Zona temporoparietal derecha, cerca de la oreja \\
+\bottomrule
+\end{longtable}
+
+Un “canal” no equivale directamente a una región cerebral aislada. La señal observada combina actividad eléctrica, referencia, contacto del electrodo y artefactos. Movimiento, parpadeo, actividad muscular, cabello y mal contacto pueden modificarla.
+
+La frecuencia nominal de 256 Hz significa que la diadema produce aproximadamente 256 muestras por segundo por canal. No significa que la GUI o {\ttfamily\small ros2 topic hz} siempre deban mostrar exactamente 256 mensajes por segundo: el protocolo puede entregar paquetes con varias muestras y el sistema después publica cada muestra, por lo que planificación del sistema operativo, lotes y carga introducen variación observable.
+
+Este equipo y este software son instrumentos de investigación, no un sistema médico de diagnóstico.
+
+\subsection{Qué es PPG}
+
+PPG significa fotopletismografía. La diadema emite luz y mide cuánta luz retorna. Los cambios de volumen sanguíneo afectan esa señal, por lo que un procesamiento posterior puede estimar pulsos, frecuencia cardiaca y métricas de variabilidad.
+
+La Athena entrega 16 valores ópticos por muestra en unidades arbitrarias. El pipeline los etiqueta {\ttfamily\small OPT0} a {\ttfamily\small OPT15} en el mensaje y {\ttfamily\small channel\_1} a {\ttfamily\small channel\_16} en SQLite.
+
+El pipeline no puede llamar “ritmo cardiaco” a esos valores crudos. Para producir BPM o HRV se requieren, al menos, selección de canales, filtrado, detección de picos, control de artefactos, definición de ventanas y validación contra una referencia.
+
+\subsection{Qué es una IMU}
+
+IMU significa unidad de medición inercial. En este proyecto reúne:
+
+\begin{itemize}
+\item acelerómetro: aceleración lineal en los ejes X, Y y Z;
+\item giroscopio: velocidad angular alrededor de los ejes X, Y y Z.
+\end{itemize}
+
+La librería Athena entrega aceleración en múltiplos de gravedad y giroscopio en grados por segundo. {\ttfamily\small muse\_node} transforma:
+
+\begin{itemize}
+\item aceleración a metros por segundo al cuadrado multiplicando por {\ttfamily\small 9.80665};
+\item velocidad angular a radianes por segundo.
+\end{itemize}
+
+La diadema no entrega una orientación absoluta ya fusionada. Por esa razón, el mensaje ROS {\ttfamily\small sensor\_msgs/Imu} marca la orientación como no disponible.
+
+\subsection{Marca de tiempo y sincronización}
+
+Cada muestra lleva una marca de tiempo dividida en segundos y nanosegundos. Esto permite ordenar las señales y relacionar EEG, IMU y PPG.
+
+Athena incluye un reloj de dispositivo, pero durante la validación física se observó que la combinación de firmware y decoder evaluada podía publicar un tick que no avanzaba. El nodo ancla por ello cada lote al {\ttfamily\small CLOCK\_REALTIME} de la computadora y reconstruye el espaciado interno con la frecuencia nominal de EEG, IMU o PPG. Los intervalos del taller y las respuestas de ground truth usan el mismo reloj local.
+
+La existencia de marcas de tiempo no garantiza por sí sola una sincronización de grado metrológico entre cuatro dispositivos independientes. Para experimentos que requieran precisión submilisegundo debe medirse el error real entre diademas y documentar deriva, latencia y reloj de referencia.
+
+\medskip\hrule\medskip
+
+\section{Conceptos tecnológicos básicos}
+
+\subsection{Bluetooth Low Energy, BlueZ y {\ttfamily\small hci}}
+
+Bluetooth Low Energy, o BLE, es el medio inalámbrico entre la diadema y la computadora. BlueZ es la implementación Bluetooth de Linux.
+
+Linux identifica cada controlador Bluetooth con un nombre como:
+
+\begin{itemize}
+\item {\ttfamily\small hci0}: normalmente el Bluetooth integrado;
+\item {\ttfamily\small hci1}, {\ttfamily\small hci2}, etc.: adaptadores USB adicionales.
+\end{itemize}
+
+La arquitectura asigna un {\ttfamily\small hci} específico a cada diadema para disminuir interferencia operativa entre conexiones y hacer explícito qué controlador es responsable de cada stream.
+
+GATT es el modelo mediante el que un dispositivo BLE expone servicios y características. Athena publica datos por características propietarias de Interaxon. La aplicación se suscribe a notificaciones GATT para recibir los paquetes.
+
+\subsection{Qué es ROS 2}
+
+ROS 2 es un middleware: un conjunto de herramientas para que procesos independientes se encuentren e intercambien mensajes. En este proyecto no controla un robot directamente; se utiliza como “sistema nervioso” del pipeline de adquisición.
+
+Los términos fundamentales son:
+
+\begin{itemize}
+\item \textbf{Nodo:} programa con una responsabilidad concreta.
+\item \textbf{Tópico:} canal de mensajes continuo, similar a una estación de radio.
+\item \textbf{Publicador:} nodo que envía mensajes a un tópico.
+\item \textbf{Suscriptor:} nodo que recibe mensajes de un tópico.
+\item \textbf{Mensaje:} estructura tipada de los datos enviados.
+\item \textbf{Servicio:} operación de solicitud y respuesta; aquí se usa para activar o detener
+la grabación.
+
+\item \textbf{Parámetro:} configuración que recibe un nodo al iniciar.
+\item \textbf{Grafo ROS:} conjunto actual de nodos, tópicos y servicios.
+\end{itemize}
+
+Una ventaja esencial es el desacoplamiento: el nodo que lee Bluetooth no necesita saber si los datos terminarán en SQLite, en una gráfica o en otra herramienta. Sólo publica mensajes con un contrato conocido.
+
+\subsection{Proceso, hilo y cola}
+
+Un proceso es una instancia aislada de un programa. Cada diadema usa su propio proceso {\ttfamily\small muse\_node}, de modo que una falla de una diadema no comparte directamente su memoria con las demás.
+
+Dentro de ese proceso hay varios hilos. El enlace BLE se atiende en un hilo y ROS 2 publica desde su ejecutor. Entre ambos se usan colas seguras para hilos. Esta separación evita publicar desde el contexto interno de la librería Bluetooth.
+
+\medskip\hrule\medskip
+
+\section{Evolución de la arquitectura}
+
+\subsection{Punto de partida}
+
+En julio de 2026 el sistema funcionaba principalmente con una diadema Muse S Athena y un solo controlador Bluetooth. El reporte original identificaba problemas para escalar: desconexiones, falta de control explícito del adaptador, reconexión lenta, escritura SQLite por muestra, PPG inactivo y mensajes poco estructurados.
+
+BrainFlow se descartó porque la versión evaluada no entendía el protocolo Athena. Se adoptó {\ttfamily\small muselsl} con soporte Athena.
+
+\subsection{Cambios principales y razón de cada uno}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}@{}}
+\toprule
+\textbf{Antes o problema inicial} & \textbf{Cambio actual} & \textbf{Razón} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Antes o problema inicial} & \textbf{Cambio actual} & \textbf{Razón} \\
+\midrule
+\endhead
+Un adaptador compartido & Pool configurable {\ttfamily\small hci0...hciN} y uno asignado por diadema & Reducir contención y hacer determinista el controlador BLE \\
+MAC escrita manualmente & Detección por propiedades BLE & Evitar operación manual y direcciones fijas \\
+Reconocimiento sólo por nombre & Nombre, UUID Interaxon/Muse, fabricante configurable u OUI conocido & Las Muse pueden anunciarse sin nombre legible \\
+Caché BlueZ confundía dispositivos apagados & Sólo se clasifican direcciones observadas en el scan actual y se excluyen {\ttfamily\small [DEL]} & Evitar falsos positivos históricos \\
+Conexiones simultáneas competían & Preparación y conexión mediante cola FIFO & BlueZ serializa varias operaciones de controlador \\
+Pérdida GATT no cambiaba el estado & Callback inmediato más watchdog de 10 s & Detectar stream muerto aunque el proceso siga vivo \\
+Reconexión podía crear identidades nuevas & La entrada MAC-operador vive durante toda la sesión & Reutilizar el operador tras reconexión \\
+Publicación desde callback BLE & Colas por señal y publicación desde ROS 2 & Seguridad entre hilos y control de sobrecarga \\
+Sin visibilidad de pérdidas & Contadores recibidos, publicados, descartados y en cola & Diagnóstico cuantitativo \\
+JSON para muestras & Mensajes {\ttfamily\small EegSample}, {\ttfamily\small PpgSample} y {\ttfamily\small sensor\_msgs/Imu} & Contratos tipados y timestamps estándar \\
+IMU parcial & Acelerómetro y giroscopio unidos por timestamp & Conservar seis ejes en un mensaje estándar \\
+PPG inactivo & Callback óptico, tópico y tabla de 16 canales & Habilitar análisis cardiaco futuro \\
+{\ttfamily\small commit} por muestra & Lotes cada 100 ms o 1024 filas & Escalar a varias diademas sin miles de commits/s \\
+Conectar implicaba grabar & Servicio ROS {\ttfamily\small set\_recording} & Permitir preparación antes del inicio experimental \\
+Sesión operada por terminal & GUI web local & Hacer el sistema accesible al equipo de investigación \\
+Archivo global único & Directorio y SQLite por sesión & Separar pruebas y reducir mezcla accidental \\
+Entrega para Excel & Exportación CSV UTF-8 rectangular & Formato solicitado, abierto y auditable \\
+Sin batería visible & Lectura de telemetría Athena en métricas & Ayudar a prevenir pruebas con carga insuficiente \\
+Tick Athena no avanzaba en prueba física & Reloj local por lote y marcas de filas EEG por sección & Mantener la alineación con eventos y ground truth \\
+\bottomrule
+\end{longtable}
+
+\subsection{Estado de las prioridades originales}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}@{}}
+\toprule
+\textbf{Mejora original} & \textbf{Estado actual} & \textbf{Observación} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Mejora original} & \textbf{Estado actual} & \textbf{Observación} \\
+\midrule
+\endhead
+Adaptadores externos dedicados & Implementada & Backend Bleak fijado al {\ttfamily\small hci} asignado \\
+Detección de desconexión & Implementada & Callback GATT y timeout de datos \\
+Cola segura entre BLE y ROS & Implementada & Colas acotadas y métricas de descarte \\
+Detección en caliente & Implementada con condición & Reserva y selecciona explícitamente un adaptador libre para escanear \\
+Recuperación de adaptadores USB & Implementada & Actualiza el inventario HCI y reincorpora controladores reenumerados \\
+Mapeo persistente MAC-operador & Implementado sólo por sesión & No se conserva entre ejecuciones, por decisión operativa \\
+Escritura por lotes & Implementada & 100 ms o 1024 filas acumuladas \\
+PPG & Implementada como señal cruda & BPM y HRV siguen pendientes \\
+Mensajes ROS tipados & Implementada & EEG/PPG propios e IMU estándar \\
+Interfaz de operación & Implementada & FastAPI y frontend accesible en LAN \\
+Inicio/detención manual de registro & Implementada & No desconecta las diademas \\
+Ground truth por sección & Implementado & Cuatro ítems Likert, avance independiente y alineación por EEG \\
+Exportación por operador & Implementada & Perfil sólo Muse y perfil completo con taller/Likert \\
+\bottomrule
+\end{longtable}
+
+\medskip\hrule\medskip
+
+\section{Arquitectura actual de extremo a extremo}
+
+\begin{MuseCode}
+┌──────────────────────────────── HARDWARE ────────────────────────────────┐
+│ Muse A       Muse B       Muse C       Muse D                           │
+│ EEG/IMU/PPG  EEG/IMU/PPG  EEG/IMU/PPG  EEG/IMU/PPG                     │
+└────┬────────────┬────────────┬────────────┬──────────────────────────────┘
+     │ BLE        │ BLE        │ BLE        │ BLE
+┌────▼────┐  ┌────▼────┐  ┌────▼────┐  ┌────▼────┐
+│  hci1   │  │  hci2   │  │  hci3   │  │  hci4   │   BlueZ / Linux
+└────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘
+     └────────────┴──────┬─────┴─────────────┘
+                         ▼
+               ┌───────────────────┐
+               │ /auto_discovery   │
+               │ scan, identidad,  │
+               │ pool y watchdog   │
+               └─────────┬─────────┘
+                         │ crea un proceso por diadema
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+ ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+ │muse_operador_a │ │muse_operador_b │ │muse_operador_x │
+ │Athena + colas  │ │Athena + colas  │ │Athena + colas  │
+ └───────┬────────┘ └───────┬────────┘ └───────┬────────┘
+         │ tópicos EEG / IMU / PPG / status     │
+         └──────────────────┬────────────────────┘
+                            ▼
+                 ┌─────────────────────┐
+                 │ /central_database   │
+                 │ suscripciones       │
+                 │ control grabación   │
+                 │ lotes + SQLite WAL  │
+                 └──────────┬──────────┘
+                            ▼
+              raw.sqlite ─────────► CSV Muse / CSV completo por operador
+                    ▲
+                    │ controla, consulta y registra ground truth
+              ┌─────┴───────────────┐
+              │ GUI FastAPI en LAN  │
+              │ 0.0.0.0:8765        │
+              │ investigador /      │
+              │ operador separados  │
+              └─────────────────────┘
+\end{MuseCode}
+
+\subsection{Capas del sistema}
+
+\begin{enumerate}
+\item \textbf{Capa física:} diademas y adaptadores USB.
+\item \textbf{Capa BLE:} BlueZ, {\ttfamily\small bluetoothctl}, Bleak y GATT Athena.
+\item \textbf{Capa de adquisición:} un {\ttfamily\small muse\_node} por diadema.
+\item \textbf{Capa de comunicación:} tópicos y servicio ROS 2.
+\item \textbf{Capa de persistencia:} {\ttfamily\small central\_database} y SQLite.
+\item \textbf{Capa de operación:} servidor FastAPI y páginas por rol accesibles en la LAN.
+\item \textbf{Capa de entrega:} metadatos, log, SQLite original y CSV exportado.
+\end{enumerate}
+
+\medskip\hrule\medskip
+
+\section{Organización del workspace}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.450\textwidth}>{\raggedright\arraybackslash}p{0.450\textwidth}@{}}
+\toprule
+\textbf{Paquete o ruta} & \textbf{Responsabilidad} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Paquete o ruta} & \textbf{Responsabilidad} \\
+\midrule
+\endhead
+{\ttfamily\small muse\_msgs} & Define los mensajes ROS propios para EEG y PPG \\
+{\ttfamily\small muse\_hrc} & Descubrimiento BLE, adaptación Athena, nodos de señal y base de datos \\
+{\ttfamily\small muse\_web} & Sesiones, API LAN por roles, taller, ground truth, GUI y exportadores \\
+{\ttfamily\small requirements\_athena.txt} & Fija la revisión de {\ttfamily\small muselsl} usada para Athena \\
+{\ttfamily\small muse\_env} externo al workspace & Runtime Python que debe importar {\ttfamily\small rclpy} y {\ttfamily\small muselsl.athena} \\
+{\ttfamily\small web\_env} & Entorno de FastAPI/Uvicorn y dependencias web \\
+{\ttfamily\small build}, {\ttfamily\small install}, {\ttfamily\small log} & Artefactos generados por {\ttfamily\small colcon} y pruebas ROS 2 \\
+\bottomrule
+\end{longtable}
+
+El repositorio contiene además un exportador XLSX heredado. Está probado y conserva compatibilidad, pero la GUI actual usa {\ttfamily\small csv\_export.py} y entrega CSV.
+
+\subsection{Entorno y dependencias}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.450\textwidth}>{\raggedright\arraybackslash}p{0.450\textwidth}@{}}
+\toprule
+\textbf{Componente} & \textbf{Referencia actual} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Componente} & \textbf{Referencia actual} \\
+\midrule
+\endhead
+Sistema operativo de desarrollo & Ubuntu 22.04 \\
+Middleware & ROS 2 Humble \\
+Python & Familia 3.10 en el entorno actual \\
+Hardware de referencia original & Muse S Gen 3 / Athena; firmware reportado 3.1.15 \\
+Decoder Athena & {\ttfamily\small muselsl} desde commit {\ttfamily\small 042881f2ed698778acafec638cc879ef6a6e5eb4} \\
+BLE Python & Bleak, usado por el backend de {\ttfamily\small muselsl} \\
+Bluetooth Linux & BlueZ, {\ttfamily\small bluetoothctl} y {\ttfamily\small hciconfig} \\
+Base local & SQLite 3, modo WAL \\
+API & FastAPI {\ttfamily\small >=0.115,<1} \\
+Servidor web & Uvicorn {\ttfamily\small >=0.30,<1} \\
+Excel heredado & OpenPyXL {\ttfamily\small >=3.1,<4} \\
+\bottomrule
+\end{longtable}
+
+El firmware 3.1.15 es una referencia del equipo con el que se inició el proyecto, no una validación automática de todas las diademas. Antes de una campaña debe inventariarse la versión real de cada unidad. Tampoco existe todavía un lock completo de dependencias transitivas; {\ttfamily\small requirements\_athena.txt} fija el decoder, mientras que la GUI usa rangos.
+
+\medskip\hrule\medskip
+
+\section{Arranque del sistema}
+
+\subsection{Archivo launch}
+
+{\ttfamily\small muse\_system.launch.py} declara cinco argumentos:
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}@{}}
+\toprule
+\textbf{Argumento} & \textbf{Valor por defecto} & \textbf{Función} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Argumento} & \textbf{Valor por defecto} & \textbf{Función} \\
+\midrule
+\endhead
+{\ttfamily\small hci\_devices} & {\ttfamily\small hci0,hci1,hci2,hci3} & Pool ordenado de controladores permitidos \\
+{\ttfamily\small muse\_manufacturer\_ids} & vacío & IDs adicionales para reconocer dispositivos \\
+{\ttfamily\small muse\_python} & {\ttfamily\small auto} & Intérprete usado para los nodos Athena \\
+{\ttfamily\small database\_path} & {\ttfamily\small \textasciitilde{}/muse\_telemetry.db} & SQLite de salida \\
+{\ttfamily\small recording\_enabled} & {\ttfamily\small true} & Indica si la persistencia inicia inmediatamente \\
+\bottomrule
+\end{longtable}
+
+El launch crea dos nodos base:
+
+\begin{itemize}
+\item ejecutable {\ttfamily\small database\_node}, renombrado {\ttfamily\small /central\_database};
+\item ejecutable {\ttfamily\small discovery\_node}, renombrado {\ttfamily\small /auto\_discovery}.
+\end{itemize}
+
+Los nodos de cada diadema se crean dinámicamente después del descubrimiento.
+
+\subsection{Diferencia entre terminal y GUI}
+
+Si se lanza directamente con {\ttfamily\small ros2 launch}, {\ttfamily\small recording\_enabled} vale {\ttfamily\small true}: se guarda desde que aparecen los tópicos.
+
+La GUI siempre lanza el mismo sistema con:
+
+\begin{MuseCode}
+recording_enabled:=false
+\end{MuseCode}
+
+Por eso puede conectar y verificar las diademas antes de grabar. Esta diferencia es intencional para no romper el flujo histórico por terminal.
+
+\medskip\hrule\medskip
+
+\section{Nodo de descubrimiento: {\ttfamily\small /auto\_discovery}}
+
+\subsection{Responsabilidad}
+
+Es el coordinador de hardware. No decodifica EEG. Sus funciones son:
+
+\begin{itemize}
+\item validar qué adaptadores configurados existen;
+\item escanear anuncios BLE;
+\item distinguir Muse de dispositivos ajenos;
+\item asignar {\ttfamily\small operador\_x} y un adaptador;
+\item preparar la conexión;
+\item crear y terminar procesos {\ttfamily\small muse\_node};
+\item serializar intentos de conexión;
+\item supervisar estados y reconexiones;
+\item reenviar métricas al log de la sesión.
+\end{itemize}
+
+\subsection{Validación de adaptadores}
+
+Ejecuta {\ttfamily\small hciconfig -a}, extrae tanto los nombres
+{\ttfamily\small hciN} como las direcciones físicas de los controladores y conserva
+únicamente la intersección con {\ttfamily\small hci\_devices}. Informa adaptadores
+configurados pero ausentes. Si la consulta falla, conserva el último inventario válido y
+no asigna a ciegas un nombre HCI que BlueZ no haya confirmado.
+
+Los adaptadores libres se almacenan en una cola. El primero libre se asigna a la siguiente
+diadema; al terminar un proceso, sólo vuelve al pool si continúa presente. Cada ejecución
+del watchdog vuelve a consultar el inventario: si un hub se desconecta, termina los nodos
+afectados y retira esos HCI; cuando Linux los reenumera, los incorpora nuevamente y permite
+la reconexión sin cambiar la identidad del operador.
+
+\subsection{Scan BLE}
+
+\begin{itemize}
+\item Primer scan: inmediato al iniciar.
+\item Periodicidad posterior: cada 15 segundos.
+\item Duración solicitada a {\ttfamily\small bluetoothctl}: 12 segundos.
+\item Timeout total del subproceso: 18 segundos.
+\end{itemize}
+
+Un scan se aplaza cuando:
+
+\begin{itemize}
+\item otro scan sigue activo;
+\item una diadema está en proceso de conexión;
+\item hay dispositivos esperando en la cola;
+\item no queda un adaptador libre.
+\end{itemize}
+
+Esto significa que puede detectar nuevas diademas mientras otras transmiten siempre que
+exista capacidad libre. El controlador elegido se retira temporalmente del pool y
+{\ttfamily\small bluetoothctl} selecciona su dirección antes de activar el scan; por ello
+el escaneo no debe caer sobre un HCI que ya transmite para otro operador. Si todos los
+adaptadores están ocupados, no intenta admitir una diadema adicional.
+
+\subsection{Identificación automática por propiedades}
+
+El sistema no acepta cualquier dispositivo encontrado. Consulta {\ttfamily\small bluetoothctl info} y considera una Muse si se cumple al menos una regla positiva:
+
+\begin{enumerate}
+\item nombre o alias contiene la palabra Muse;
+\item anuncia UUID {\ttfamily\small FE8D}, asignado a Interaxon, o el namespace propietario {\ttfamily\small 273e};
+\item anuncia un ID de fabricante incluido en {\ttfamily\small muse\_manufacturer\_ids};
+\item su dirección empieza con el OUI conocido {\ttfamily\small 00:55:DA}.
+\end{enumerate}
+
+Las direcciones se normalizan a minúsculas. Los dispositivos removidos durante el scan se excluyen. Esto evita que la caché persistente de BlueZ haga aparecer una diadema apagada.
+
+\subsection{Preparación BLE}
+
+Para cada Muse nueva se ejecuta temporalmente:
+
+\begin{enumerate}
+\item {\ttfamily\small bluetoothctl connect <MAC>};
+\item comprobación de respuesta exitosa;
+\item {\ttfamily\small bluetoothctl disconnect <MAC>}.
+\end{enumerate}
+
+No se hace pairing permanente porque Athena no necesita un bond. La conexión temporal prepara el enlace y después lo libera para Bleak. Si esta preparación falla, el sistema registra una advertencia pero permite que Athena intente conectar directamente.
+
+\subsection{Identidad de operador}
+
+Cada MAC nueva recibe secuencialmente {\ttfamily\small operador\_a}, {\ttfamily\small operador\_b}, {\ttfamily\small operador\_c}, etc. La entrada queda en memoria durante la ejecución completa del pipeline. Si la misma MAC se desconecta y vuelve, conserva su operador.
+
+El mapeo \textbf{no se conserva entre sesiones ni reinicios}. En una sesión futura, el orden de encendido/detección puede producir otra asignación. Esta decisión evita convertir un identificador físico permanente en identidad longitudinal, pero obliga a documentar la correspondencia participante-operador en cada protocolo.
+
+\subsection{Cola y máquina de estados}
+
+Los estados internos son:
+
+\begin{MuseCode}
+SCANNING → CONNECTING → STREAMING
+                 │           │
+                 └── LOST ◄──┘
+                       │
+                       └── reintento → CONNECTING
+\end{MuseCode}
+
+Sólo una diadema establece conexión a la vez. La cola normal es FIFO. Los dispositivos perdidos cuyo tiempo de espera terminó tienen prioridad, ordenados por {\ttfamily\small next\_retry}.
+
+El watchdog se ejecuta cada 3 segundos. Si una conexión no llega a streaming en 40
+segundos, termina el proceso, libera el adaptador válido y reencola la diadema.
+
+La espera de reintento es exponencial y acotada: 5, 10, 20, 40 y después 60 segundos por
+intento.
+
+\subsection{Proceso hijo y logs}
+
+El nodo lanza:
+
+\begin{MuseCode}
+<python-athena> -m muse_hrc.muse_node --ros-args \
+  -p operador_id:=operador_a \
+  -p mac_address:=... \
+  -p hci_device:=hci1
+\end{MuseCode}
+
+La salida propia del proceso se escribe en {\ttfamily\small /tmp/muse\_operador\_a.log}. Los estados que publica por ROS se vuelven a registrar en el log principal como líneas {\ttfamily\small MUSE\_STATUS\_JSON=...}, que la GUI puede interpretar sin depender de texto humano.
+
+\medskip\hrule\medskip
+
+\section{Adaptación de {\ttfamily\small muselsl} y protocolo Athena}
+
+\subsection{Por qué existe {\ttfamily\small AdapterAthena}}
+
+La clase Athena original necesita una adaptación para fijar explícitamente el adaptador BlueZ. {\ttfamily\small AdapterAthena} crea un backend Bleak que pasa {\ttfamily\small adapter=hciN} tanto al escáner como al {\ttfamily\small BleakClient}.
+
+Si una dirección BLE cambia y existe un nombre conocido, el backend puede escanear otra vez sobre el mismo controlador y refrescar la dirección.
+
+\subsection{Secuencia de conexión}
+
+\begin{enumerate}
+\item Crear backend Bleak dedicado.
+\item Conectar con timeout de 30 segundos.
+\item Verificar que el dispositivo expone la característica de datos Athena.
+\item Suscribirse a control y datos.
+\item Ejecutar la secuencia de inicialización del preset Athena.
+\item Iniciar streaming.
+\end{enumerate}
+
+Si falta la característica Athena, el sistema desconecta y reporta que podría no ser una Muse S Athena compatible.
+
+\subsection{Reloj local de adquisición}
+
+Una prueba física detectó más de cien mil muestras EEG cuyos timestamps ocupaban solo unos milisegundos, aunque la adquisición había durado varios minutos. Para impedir que ese tick defectuoso rompa la alineación con el taller, {\ttfamily\small HostSampleClock} asigna a cada lote el tiempo de recepción local y conserva el espaciado nominal entre sus muestras. También impide que el tiempo retroceda entre lotes.
+
+La validación de que un operador produjo EEG durante una sección usa adicionalmente marcas de avance de la clave primaria de {\ttfamily\small eeg\_logs} al inicio y al final. Así, el envío del cuestionario no depende de un único mecanismo temporal.
+
+\subsection{Selección del runtime Python}
+
+{\ttfamily\small auto\_discovery} no supone que el Python del launch tiene {\ttfamily\small muselsl}. Revisa, en orden:
+
+\begin{enumerate}
+\item intérprete indicado explícitamente por {\ttfamily\small muse\_python};
+\item {\ttfamily\small VIRTUAL\_ENV} activo;
+\item {\ttfamily\small muse\_env/bin/python} asociado al workspace;
+\item intérprete actual;
+\item {\ttfamily\small python3} encontrado en {\ttfamily\small PATH}.
+\end{enumerate}
+
+Cada candidato debe importar simultáneamente {\ttfamily\small rclpy} y {\ttfamily\small muselsl.athena}. Esto evita lanzar un proceso que sólo tiene una de las dos dependencias.
+
+\medskip\hrule\medskip
+
+\section{Nodo por diadema: {\ttfamily\small /muse\_operador\_x}}
+
+\subsection{Responsabilidad}
+
+Cada diadema tiene un nodo y un proceso independientes. El nodo:
+
+\begin{itemize}
+\item establece y mantiene el enlace Athena;
+\item recibe callbacks EEG, acelerómetro, giroscopio, óptica y batería;
+\item transforma unidades;
+\item crea mensajes ROS con timestamp;
+\item publica las tres señales y el estado;
+\item mide tasas y pérdidas;
+\item detecta inactividad y reconecta.
+\end{itemize}
+
+\subsection{Publicadores}
+
+Para {\ttfamily\small operador\_a}, se crean:
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}@{}}
+\toprule
+\textbf{Tópico} & \textbf{Tipo} & \textbf{Profundidad de cola ROS} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Tópico} & \textbf{Tipo} & \textbf{Profundidad de cola ROS} \\
+\midrule
+\endhead
+{\ttfamily\small /operador\_a/eeg} & {\ttfamily\small muse\_msgs/msg/EegSample} & 1000 \\
+{\ttfamily\small /operador\_a/imu} & {\ttfamily\small sensor\_msgs/msg/Imu} & 1000 \\
+{\ttfamily\small /operador\_a/ppg} & {\ttfamily\small muse\_msgs/msg/PpgSample} & 1000 \\
+{\ttfamily\small /operador\_a/status} & {\ttfamily\small std\_msgs/msg/String} con JSON & 20 \\
+\bottomrule
+\end{longtable}
+
+Al proporcionar sólo una profundidad, ROS 2 construye un perfil QoS keep-last con esa capacidad. Los tópicos existen mientras el proceso existe; su existencia no demuestra que la diadema siga enviando datos. El estado {\ttfamily\small streaming} y las tasas son las pruebas de flujo real.
+
+\subsection{Mensaje EEG}
+
+\begin{MuseCode}
+std_msgs/Header header
+string operator_id
+uint16 sampling_rate_hz
+float32[4] data
+\end{MuseCode}
+
+\begin{itemize}
+\item {\ttfamily\small header.stamp}: tiempo de la muestra;
+\item {\ttfamily\small header.frame\_id}: {\ttfamily\small muse\_operador\_a/eeg};
+\item {\ttfamily\small operator\_id}: {\ttfamily\small operador\_a};
+\item {\ttfamily\small sampling\_rate\_hz}: 256;
+\item {\ttfamily\small data}: TP9, AF7, AF8, TP10, en microvoltios.
+\end{itemize}
+
+Cada muestra del lote Athena se convierte en un mensaje individual.
+
+\subsection{Mensaje IMU}
+
+Se usa {\ttfamily\small sensor\_msgs/msg/Imu}, un tipo estándar. Contiene:
+
+\begin{itemize}
+\item {\ttfamily\small angular\_velocity}: X, Y, Z en rad/s;
+\item {\ttfamily\small linear\_acceleration}: X, Y, Z en m/s²;
+\item {\ttfamily\small orientation}: no disponible;
+\item timestamp y {\ttfamily\small frame\_id} {\ttfamily\small muse\_operador\_a/imu}.
+\end{itemize}
+
+Athena entrega acelerómetro y giroscopio mediante callbacks separados. El nodo conserva temporalmente el último lote de aceleración y lo asocia al giroscopio si sus timestamps difieren menos de 20 ms. Si no encuentra correspondencia, marca la aceleración como no confiable mediante la covarianza estándar del mensaje.
+
+\subsection{Mensaje PPG}
+
+\begin{MuseCode}
+std_msgs/Header header
+string operator_id
+uint16 sampling_rate_hz
+float32[16] data
+\end{MuseCode}
+
+\begin{itemize}
+\item {\ttfamily\small sampling\_rate\_hz}: 64;
+\item {\ttfamily\small data}: 16 canales ópticos crudos;
+\item unidades: arbitrarias.
+\end{itemize}
+
+\subsection{Colas internas y control de sobrecarga}
+
+La librería BLE y ROS 2 no publican desde el mismo hilo. Existen:
+
+\begin{itemize}
+\item cola EEG: máximo 5000 mensajes;
+\item cola IMU: máximo 5000 mensajes;
+\item cola PPG: máximo 5000 mensajes;
+\item cola de estado: máximo 100 mensajes.
+\end{itemize}
+
+Un timer de 1 ms vacía como máximo 512 elementos por señal en cada ciclo. Si una cola sensorial está llena, la muestra nueva se descarta y aumenta el contador {\ttfamily\small dropped}. Si la cola de estado está llena, se elimina el estado más antiguo para dejar entrar el nuevo.
+
+Este diseño hace visible la sobrecarga en lugar de permitir crecimiento ilimitado de memoria.
+
+\subsection{Supervisión de conexión}
+
+\begin{itemize}
+\item Bleak llama inmediatamente {\ttfamily\small \_on\_disconnect} cuando detecta pérdida GATT.
+\item Un timer cada segundo comprueba inactividad.
+\item Diez segundos sin EEG durante streaming se consideran pérdida de datos.
+\item El loop BLE se bombea cada 100 ms para procesar notificaciones síncronas.
+\item Se envía keepalive Athena cada 20 segundos.
+\item Un solo hilo de conexión puede estar activo por nodo.
+\end{itemize}
+
+El nodo intenta reconectar sin cambiar su operador. Puede recibir otro adaptador libre si
+el anterior desapareció; si no logra estabilizarse en 40 segundos, el coordinador puede
+terminarlo y relanzarlo.
+
+\subsection{Métricas y batería}
+
+Cada 10 segundos se publica un estado con:
+
+\begin{itemize}
+\item Hz recibidos de EEG, IMU y PPG;
+\item Hz publicados;
+\item acumulados recibidos y publicados;
+\item descartes por señal;
+\item profundidad actual de cada cola;
+\item estado streaming y momento de conexión;
+\item porcentaje de batería, si Athena ya lo reportó.
+\end{itemize}
+
+La batería se obtiene actualmente del atributo interno {\ttfamily\small \_battery} de la clase Athena y se limita visualmente a 100 \%. Al depender de un atributo privado de una dependencia, una actualización de {\ttfamily\small muselsl} podría requerir adaptar esta lectura.
+
+\medskip\hrule\medskip
+
+\section{Grafo ROS 2 actual}
+
+Con dos usuarios conectados, el grafo conceptual es:
+
+\begin{MuseCode}
+/auto_discovery
+/central_database
+/muse_operador_a
+/muse_operador_b
+\end{MuseCode}
+
+Y los tópicos relevantes son:
+
+\begin{MuseCode}
+/operador_a/eeg      /operador_b/eeg
+/operador_a/imu      /operador_b/imu
+/operador_a/ppg      /operador_b/ppg
+/operador_a/status   /operador_b/status
+/parameter_events
+/rosout
+\end{MuseCode}
+
+Para cuatro diademas se agregan los grupos {\ttfamily\small operador\_c} y {\ttfamily\small operador\_d}.
+
+\subsection{Servicio de control}
+
+{\ttfamily\small central\_database} crea el servicio privado {\ttfamily\small \textasciitilde{}/set\_recording}, que al aplicar el nombre del nodo se resuelve como:
+
+\begin{MuseCode}
+/central_database/set_recording
+\end{MuseCode}
+
+Tipo:
+
+\begin{MuseCode}
+std_srvs/srv/SetBool
+\end{MuseCode}
+
+Una solicitud {\ttfamily\small data: true} activa persistencia. {\ttfamily\small data: false} vacía los lotes pendientes, cierra el intervalo y pausa nuevas inserciones. La transmisión ROS continúa.
+
+\subsection{Qué significa {\ttfamily\small ros2 topic hz}}
+
+La herramienta mide la frecuencia de llegada de mensajes durante una ventana. Reporta:
+
+\begin{itemize}
+\item {\ttfamily\small average rate}: mensajes promedio por segundo;
+\item {\ttfamily\small min}: menor intervalo observado entre mensajes;
+\item {\ttfamily\small max}: mayor intervalo observado;
+\item {\ttfamily\small std dev}: variabilidad de los intervalos;
+\item {\ttfamily\small window}: cantidad de intervalos incluidos.
+\end{itemize}
+
+Un {\ttfamily\small min} de cero puede aparecer por ráfagas de mensajes publicadas casi juntas. Una tasa menor a la nominal no prueba por sí sola pérdida en el sensor: debe compararse con los contadores internos, descartes, carga de CPU y filas persistidas.
+
+\medskip\hrule\medskip
+
+\section{Nodo de base de datos: {\ttfamily\small /central\_database}}
+
+\subsection{Descubrimiento dinámico de operadores}
+
+Cada 3 segundos consulta el grafo. Cuando aparece un tópico que termina en {\ttfamily\small /eeg}, extrae el nombre de operador y crea tres suscripciones: EEG, IMU y PPG. Cada operador se registra una sola vez en {\ttfamily\small suscripciones\_activas}.
+
+Esto permite que el nodo de base de datos arranque antes que las diademas y se adapte a usuarios que aparecen después.
+
+\subsection{Puerta de grabación}
+
+Los callbacks comprueban {\ttfamily\small recording\_enabled} antes de añadir datos a memoria:
+
+\begin{itemize}
+\item si es {\ttfamily\small false}, el mensaje circula por ROS pero se ignora para persistencia;
+\item si es {\ttfamily\small true}, se incorpora al lote correspondiente.
+\end{itemize}
+
+EEG, IMU y PPG comparten el mismo estado de grabación para evitar que una modalidad se active accidentalmente sin las otras.
+
+\subsection{SQLite y modo WAL}
+
+SQLite guarda todas las tablas en un archivo local. Se activa WAL, Write-Ahead Logging. En este modo los cambios se escriben primero en un log de transacciones y después se consolidan. Entre sus ventajas:
+
+\begin{itemize}
+\item atomicidad de transacciones;
+\item mejor convivencia entre escritura y preview de lectura;
+\item recuperación más segura ante cierre inesperado que un TXT escrito continuamente.
+\end{itemize}
+
+SQLite sigue siendo el original de adquisición. Cada CSV por operador es una representación de intercambio, no el motor de base de datos activo.
+
+\subsection{Escritura por lotes}
+
+Existen tres listas pendientes. Se hace commit cuando ocurre primero:
+
+\begin{itemize}
+\item timer de 0.1 segundos;
+\item suma de pendientes igual o mayor a 1024 filas.
+\end{itemize}
+
+Cada tabla usa {\ttfamily\small executemany} dentro de la misma transacción. Si SQLite devuelve error:
+
+\begin{enumerate}
+\item se ejecuta rollback;
+\item las filas fallidas regresan al frente de las listas;
+\item se registra el error.
+\end{enumerate}
+
+Al destruir el nodo se hace un último commit y se cierra la conexión.
+
+\subsection{Esquema de tablas}
+
+\subsubsection{{\ttfamily\small eeg\_logs}}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}@{}}
+\toprule
+\textbf{Columna} & \textbf{Tipo} & \textbf{Contenido} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Columna} & \textbf{Tipo} & \textbf{Contenido} \\
+\midrule
+\endhead
+{\ttfamily\small id} & INTEGER & Secuencia autoincremental \\
+{\ttfamily\small operador} & TEXT & {\ttfamily\small operador\_a}, etc. \\
+{\ttfamily\small timestamp} & REAL & Segundos Unix con fracción \\
+{\ttfamily\small channel\_1} & REAL & TP9 \\
+{\ttfamily\small channel\_2} & REAL & AF7 \\
+{\ttfamily\small channel\_3} & REAL & AF8 \\
+{\ttfamily\small channel\_4} & REAL & TP10 \\
+{\ttfamily\small channel\_5} & REAL & Campo heredado; se rellena con 0 \\
+\bottomrule
+\end{longtable}
+
+El mensaje moderno contiene cuatro canales. La quinta columna permanece por compatibilidad con bases anteriores y no debe interpretarse como un electrodo real.
+
+\subsubsection{{\ttfamily\small imu\_logs}}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}>{\raggedright\arraybackslash}p{0.300\textwidth}@{}}
+\toprule
+\textbf{Columna} & \textbf{Tipo} & \textbf{Contenido} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Columna} & \textbf{Tipo} & \textbf{Contenido} \\
+\midrule
+\endhead
+{\ttfamily\small id} & INTEGER & Secuencia \\
+{\ttfamily\small operador} & TEXT & Identidad de sesión \\
+{\ttfamily\small timestamp} & REAL & Tiempo de muestra \\
+{\ttfamily\small gyro\_x/y/z} & REAL & Velocidad angular en rad/s \\
+{\ttfamily\small accel\_x/y/z} & REAL & Aceleración en m/s² \\
+\bottomrule
+\end{longtable}
+
+La inicialización migra esquemas antiguos: si faltan las columnas de aceleración, las agrega mediante {\ttfamily\small ALTER TABLE}.
+
+\subsubsection{{\ttfamily\small ppg\_logs}}
+
+Contiene {\ttfamily\small id}, {\ttfamily\small operador}, {\ttfamily\small timestamp} y {\ttfamily\small channel\_1} a {\ttfamily\small channel\_16}. Cada fila representa una muestra óptica completa.
+
+\subsubsection{{\ttfamily\small recording\_periods}}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.450\textwidth}>{\raggedright\arraybackslash}p{0.450\textwidth}@{}}
+\toprule
+\textbf{Columna} & \textbf{Contenido} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Columna} & \textbf{Contenido} \\
+\midrule
+\endhead
+{\ttfamily\small id} & Número de intervalo \\
+{\ttfamily\small started\_at} & Tiempo de inicio según la computadora \\
+{\ttfamily\small ended\_at} & Tiempo de detención; vacío mientras está abierto \\
+\bottomrule
+\end{longtable}
+
+\subsubsection{{\ttfamily\small workshop\_sections}}
+
+Registra por separado el intervalo de cada operador en cada uno de los seis pasos del
+taller. Sus campos principales son: identificador y título de la práctica, operador,
+identificador, número, título y duración objetivo del paso; tiempos Unix e ISO de inicio y
+fin; motivo de cierre; y mapas JSON con el último identificador EEG observado al inicio y
+al final. La restricción {\ttfamily\small UNIQUE(operator, section\_id)} impide que un mismo
+operador responda dos veces el mismo paso, pero no obliga a que los operadores avancen al
+mismo ritmo.
+
+Las marcas {\ttfamily\small eeg\_start\_ids} y {\ttfamily\small eeg\_end\_ids} son
+watermarks de filas: permiten comprobar que para ese operador se insertó EEG nuevo dentro
+del intervalo, incluso si un timestamp heredado o defectuoso no refleja correctamente el
+avance. El gestor incluye una migración para convertir intervalos antiguos, que eran
+globales, al esquema actual por operador.
+
+\subsubsection{{\ttfamily\small ground\_truth\_responses}}
+
+Guarda múltiples respuestas por operador y paso, con una cadencia continua de diez minutos
+por operador que no se reinicia al cambiar de sección.
+Conserva el identificador del intervalo de sección, el número global de medición, el número
+de medición dentro de la sección, el vencimiento programado, la ventana temporal de EEG,
+el instante de envío, las cuatro puntuaciones enteras de 1 a 5, el promedio global
+{\ttfamily\small engagement\_score}, el promedio de esfuerzo y persistencia, la fuente de
+reloj y el DOI del instrumento. Las restricciones de unicidad sobre el número global y
+sobre el número dentro del paso evitan duplicados. Un índice por operador y ventana
+facilita la alineación posterior con las señales. Al abrir una base histórica, el gestor
+migra automáticamente el antiguo registro único por sección al esquema recurrente.
+
+\subsection{Métricas de persistencia}
+
+Cada 10 segundos el nodo informa acumulados guardados por modalidad, estado de grabación y filas todavía pendientes. Estos acumulados corresponden a la ejecución actual, no a todo el contenido histórico de la base.
+
+\medskip\hrule\medskip
+
+\section{Aplicación web en red local}
+
+\subsection{Objetivo}
+
+La GUI traduce operaciones de terminal a controles comprensibles. No sustituye ROS 2; lo
+inicia, consulta y controla en la computadora de adquisición. El navegador sí puede estar
+en otra computadora o teléfono de la misma red local: los procesos ROS 2 y los archivos
+permanecen únicamente en el equipo central.
+
+\subsection{Servidor}
+
+\begin{itemize}
+\item Framework: FastAPI.
+\item Servidor: Uvicorn.
+\item Dirección de escucha: {\ttfamily\small 0.0.0.0}.
+\item Puerto por defecto: {\ttfamily\small 8765}.
+\item Sin Swagger, ReDoc ni OpenAPI públicos.
+\item Directorio estático: HTML, CSS y JavaScript incluidos en {\ttfamily\small muse\_web}.
+\end{itemize}
+
+Al iniciar, el servidor imprime enlaces separados para investigador y operador, protegidos
+con claves independientes. Las credenciales se crean una sola vez y se conservan en
+{\ttfamily\small \textasciitilde{}/.config/muse-research/access.json} con permisos
+{\ttfamily\small 0600}; por ello reiniciar el servidor no invalida los enlaces ya
+compartidos. También pueden fijarse mediante variables de entorno. Otros dispositivos de
+la misma LAN pueden acceder; el puerto no debe publicarse en Internet.
+
+El enlace intercambia la clave por una cookie {\ttfamily\small HttpOnly},
+{\ttfamily\small SameSite=Strict}, válida durante 12 horas. Como compatibilidad para
+navegadores que rechazan cookies sobre una dirección IP local, el frontend conserva la
+credencial sólo durante la pestaña y la envía como bearer token.
+
+\subsection{Gestor de sesión}
+
+{\ttfamily\small SessionManager} permite una sola sesión activa. Al preparar:
+
+\begin{enumerate}
+\item valida el formato de adaptadores con una expresión regular estricta;
+\item normaliza código y experimento para formar un nombre seguro;
+\item crea un directorio privado;
+\item escribe {\ttfamily\small metadata.json} de forma atómica;
+\item lanza {\ttfamily\small ros2 launch} en un grupo de procesos nuevo;
+\item redirige stdout y stderr a {\ttfamily\small pipeline.log};
+\item deja la base en espera, sin grabar.
+\end{enumerate}
+
+Los estados de sesión incluyen {\ttfamily\small preparing}, {\ttfamily\small ready}, {\ttfamily\small recording}, {\ttfamily\small completed}, {\ttfamily\small pipeline\_exited} y {\ttfamily\small launch\_error}.
+
+Puede haber varios intervalos start/stop dentro de una sesión. Cada intervalo se guarda tanto en metadatos JSON como en {\ttfamily\small recording\_periods} de SQLite.
+
+El taller también admite varios intervalos, pero éstos son independientes para cada
+operador. Un participante puede iniciar, responder y cerrar su paso actual aunque los demás
+estén en otro paso o aún no hayan contestado.
+
+\subsection{Funciones visibles}
+
+\begin{itemize}
+\item Preparar pipeline y conectar.
+\item Comenzar registro.
+\item Detener registro sin desconectar.
+\item Finalizar sesión y crear CSV.
+\item Ver usuarios, estado, adaptador, tiempo conectado y batería.
+\item Ver tasas publicadas de EEG, IMU y PPG.
+\item Medir un tópico durante 4 segundos con {\ttfamily\small ros2 topic hz --window 200}.
+\item Consultar {\ttfamily\small ros2 node list} y {\ttfamily\small ros2 topic list -t}.
+\item Ver las últimas 60 líneas del log.
+\item Previsualizar conteos y hasta 20 filas recientes por tabla; la GUI pide 5.
+\item Listar sesiones históricas y descargar o regenerar CSV.
+\item Mostrar al investigador el estado del protocolo y de sus seis pasos.
+\item Dar al operador una pestaña aislada que sólo muestra su identidad, su paso actual y
+la escala Likert; no expone la base de datos ni los controles del pipeline.
+\item Limpiar la encuesta después de enviarla y habilitar inmediatamente el siguiente paso
+para ese mismo operador.
+\item Generar por operador un CSV sólo con señales Muse y otro completo con taller y Likert.
+\end{itemize}
+
+\subsection{Diseño visual actual}
+
+La interfaz utiliza una identidad visual propia basada en cuatro colores solicitados para
+el proyecto: rosa claro RGB(255, 227, 222), azul claro RGB(222, 240, 255), malva
+RGB(191, 134, 156) y azul violáceo RGB(134, 140, 191). Se eliminaron el eslogan, el texto
+introductorio sobre conexión y los números decorativos de las tarjetas. La vista de
+investigador conserva un resumen compacto del estado del pipeline; la del operador prioriza
+la lectura y respuesta del instrumento sin mostrar información técnica sensible.
+
+\subsection{API web por roles}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.450\textwidth}>{\raggedright\arraybackslash}p{0.450\textwidth}@{}}
+\toprule
+\textbf{Método y ruta} & \textbf{Función} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Método y ruta} & \textbf{Función} \\
+\midrule
+\endhead
+{\ttfamily\small GET /api/status} & Pipeline, grabación, sesión, operadores y tail \\
+{\ttfamily\small GET /api/operator/status} & Estado mínimo permitido para el operador \\
+{\ttfamily\small GET /api/sessions} & Lista de sesiones locales \\
+{\ttfamily\small POST /api/session/start} & Preparar nueva sesión \\
+{\ttfamily\small POST /api/session/stop} & Finalizar, detener procesos y exportar \\
+{\ttfamily\small POST /api/recording/start} & Activar persistencia \\
+{\ttfamily\small POST /api/recording/stop} & Pausar persistencia \\
+{\ttfamily\small GET /api/database/preview} & Preview fijo y de sólo lectura \\
+{\ttfamily\small POST /api/topic/hz} & Medición temporal de un tópico validado \\
+{\ttfamily\small GET /api/ros/graph} & Nodos y tópicos tipados \\
+{\ttfamily\small GET /api/workshop} & Protocolo, intervalos y respuestas para investigador \\
+{\ttfamily\small GET /api/operator/workshop} & Vista reducida del protocolo para operador \\
+{\ttfamily\small POST /api/workshop/section/start} & Iniciar el paso de un operador \\
+{\ttfamily\small POST /api/workshop/section/finish} & Cerrar manualmente un paso \\
+{\ttfamily\small POST /api/ground-truth} & Validar y guardar los cuatro ítems Likert \\
+{\ttfamily\small POST /api/session/export} & Regenerar CSV \\
+{\ttfamily\small GET /api/session/\{name\}/csv/\{operator\}/\{profile\}} & Descargar perfil Muse o completo \\
+\bottomrule
+\end{longtable}
+
+Las rutas de control del pipeline, preview, diagnóstico y descarga exigen rol de
+investigador. El rol de operador sólo puede leer el estado mínimo y el protocolo, iniciar
+y terminar su propia sección y enviar sus evaluaciones. Una credencial de investigador también puede
+acceder a las rutas de operador para facilitar pruebas controladas.
+
+\subsection{Lectura del estado de usuarios}
+
+La GUI no se suscribe directamente a ROS. Lee hasta los últimos 2 MB de {\ttfamily\small pipeline.log}, busca líneas {\ttfamily\small MUSE\_STATUS\_JSON} y reconstruye el estado más reciente por operador.
+
+Las métricas periódicas repiten {\ttfamily\small streaming} y {\ttfamily\small connected\_since}, por lo que la GUI puede recuperar estado aunque la primera línea de conexión ya no esté en esa ventana.
+
+\subsection{Preview de base de datos}
+
+El backend abre SQLite con {\ttfamily\small mode=ro}, limita el tiempo de espera a 2 segundos y consulta únicamente una lista fija de tablas. No acepta SQL libre desde el navegador. Devuelve:
+
+\begin{itemize}
+\item número total de filas;
+\item últimas filas por {\ttfamily\small id};
+\item nombres de columnas y valores.
+\end{itemize}
+
+\subsection{Taller físico y ground truth de engagement}
+
+La práctica fija se identifica como {\ttfamily\small pick-and-place-physical} y se titula
+``Pick and Place en el robot físico xArm 6''. El protocolo declara una duración estimada
+global de 60 minutos; las metas de sus seis secciones suman 65 minutos y deben entenderse como una
+guía operativa, no como una restricción automática impuesta por la GUI.
+
+\begin{longtable}{@{}>{\raggedleft\arraybackslash}p{0.07\textwidth}>{\raggedright\arraybackslash}p{0.67\textwidth}>{\raggedleft\arraybackslash}p{0.14\textwidth}@{}}
+\toprule
+\textbf{Paso} & \textbf{Sección} & \textbf{Meta} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Paso} & \textbf{Sección} & \textbf{Meta} \\
+\midrule
+\endhead
+1 & El ciclo pick-and-place --- ocho fases, dos alturas & 17 min \\
+2 & El home se enseña con las manos, no viene de fábrica & 8 min \\
+3 & Waypoints --- tu rutina en el panel y el lado del pick & 17 min \\
+4 & Simetría del ciclo --- el lado del place y el cierre repetible & 8 min \\
+5 & Validación con pieza real --- la corrida y tu nota & 8 min \\
+6 & El robot no sabe si agarró --- y la corrida final es mía & 7 min \\
+\bottomrule
+\end{longtable}
+
+Al comenzar un paso, el backend toma una marca de tiempo Unix con
+{\ttfamily\small CLOCK\_REALTIME} y guarda los identificadores más recientes de EEG. Al
+cumplirse cada periodo de diez minutos desde el inicio de su primer paso, cada operador evalúa
+cuatro afirmaciones sobre la ventana más reciente:
+
+\begin{enumerate}
+\item Estuve involucrado/a con el tema que estábamos trabajando.
+\item Puse mucho esfuerzo.
+\item Me gustaría que pudiéramos continuar trabajando un poco más.
+\item Estuve tan involucrado/a que olvidé todo lo que ocurría a mi alrededor.
+\end{enumerate}
+
+Cada afirmación utiliza una escala Likert de cinco puntos: 1, nada cierto para mí; 2, no es
+cierto para mí; 3, neutral; 4, es cierto para mí; y 5, muy cierto para mí. El instrumento
+corresponde a Rotgans y Schmidt (2011), \emph{Cognitive engagement in the problem-based
+learning classroom}, DOI
+\href{https://doi.org/10.1007/s10459-011-9272-9}{10.1007/s10459-011-9272-9}.
+
+Antes de aceptar cada evaluación, el gestor verifica que el identificador máximo de EEG del
+operador haya avanzado desde el límite inicial de esa ventana. Esta validación evita guardar
+una etiqueta sin señal asociada y es específica para cada participante. Al enviar, se guarda
+la respuesta, se limpia el formulario y se programa la siguiente medición diez minutos más
+tarde; la sección permanece activa y un cambio de paso no reinicia la cadencia. La respuesta
+queda asociada al paso activo en el momento del envío, mientras la cronología de secciones
+permite identificar si la ventana atravesó una transición. El operador termina el paso mediante un botón separado cuando
+realmente cambia de paso. Si una medición ya venció, debe contestarla antes de cerrar la
+sección. El resto de los operadores no bloquea ese flujo.
+
+\subsection{Terminación segura}
+
+Al finalizar, el gestor intenta:
+
+\begin{enumerate}
+\item detener la grabación si seguía activa;
+\item enviar {\ttfamily\small SIGINT} al grupo y esperar 15 s;
+\item si no termina, enviar {\ttfamily\small SIGTERM} y esperar 5 s;
+\item como último recurso, enviar {\ttfamily\small SIGKILL} y esperar 3 s;
+\item actualizar metadatos;
+\item exportar CSV.
+\end{enumerate}
+
+Al cerrar el servidor web, {\ttfamily\small shutdown()} finaliza y exporta una sesión que siga activa.
+
+\medskip\hrule\medskip
+
+\section{Flujo operativo de una sesión}
+
+\subsection{Preparación sin grabación}
+
+\begin{MuseCode}
+Usuario pulsa PREPARAR
+        ↓
+GUI crea directorio y lanza ROS 2 con recording=false
+        ↓
+auto_discovery valida hci y escanea BLE
+        ↓
+identifica Muse, asigna operador y adaptador
+        ↓
+muse_node conecta, decodifica y publica
+        ↓
+central_database crea suscripciones
+        ↓
+mensajes llegan, pero los callbacks no los insertan
+        ↓
+GUI muestra streaming, Hz, batería y tiempo conectado
+\end{MuseCode}
+
+Esta fase permite colocar correctamente las diademas y verificar que todos los usuarios están listos sin contaminar el conjunto experimental.
+
+\subsection{Grabación}
+
+\begin{MuseCode}
+Usuario pulsa COMENZAR
+        ↓
+POST /api/recording/start
+        ↓
+ros2 service call /central_database/set_recording true
+        ↓
+se abre recording_period
+        ↓
+EEG/IMU/PPG entran a lotes
+        ↓
+commit SQLite cada 100 ms o 1024 filas
+\end{MuseCode}
+
+\subsection{Pausa}
+
+\begin{MuseCode}
+Usuario pulsa DETENER REGISTRO
+        ↓
+servicio false
+        ↓
+se desactiva la puerta, se vacían lotes y se cierra el intervalo
+        ↓
+las diademas continúan conectadas y publicando
+\end{MuseCode}
+
+\subsection{Finalización}
+
+\begin{MuseCode}
+Usuario pulsa FINALIZAR
+        ↓
+se detiene grabación si era necesario
+        ↓
+se cierra el grupo ROS 2
+        ↓
+SQLite queda consolidado
+        ↓
+se generan dos CSV temporales por operador
+        ↓
+os.replace publica los perfiles Muse y completo de forma atómica
+\end{MuseCode}
+
+\medskip\hrule\medskip
+
+\section{Archivos producidos por sesión}
+
+Ruta:
+
+\begin{MuseCode}
+~/MuseResearch/sessions/<AAAAMMDD_HHMMSS_codigo_experimento>/
+\end{MuseCode}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.450\textwidth}>{\raggedright\arraybackslash}p{0.450\textwidth}@{}}
+\toprule
+\textbf{Archivo} & \textbf{Uso} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Archivo} & \textbf{Uso} \\
+\midrule
+\endhead
+{\ttfamily\small raw.sqlite} & Fuente transaccional original \\
+{\ttfamily\small raw.sqlite-wal} / {\ttfamily\small raw.sqlite-shm} & Archivos temporales mientras SQLite WAL está activo \\
+{\ttfamily\small metadata.json} & Código seudónimo, experimento, notas, adaptadores, estados e intervalos \\
+{\ttfamily\small pipeline.log} & Eventos ROS 2 y estados estructurados \\
+{\ttfamily\small export\_operador\_x\_muse.csv} & Sólo EEG, IMU y PPG del operador \\
+{\ttfamily\small export\_operador\_x\_completo.csv} & Señales, metadata, workshop y Likert \\
+\bottomrule
+\end{longtable}
+
+El directorio raíz y los directorios de sesión usan permisos {\ttfamily\small 0700}. Metadatos, log y exportación reciben permisos restrictivos {\ttfamily\small 0600} mediante el código.
+
+\subsection{Formato CSV}
+
+Cada operador recibe dos archivos con un solo encabezado y estructura rectangular. El perfil {\ttfamily\small muse} sólo contiene EEG, IMU y PPG. El perfil completo añade metadata, periodos, secciones y ground truth. La columna {\ttfamily\small record\_type} distingue los tipos de fila y nunca se incluyen señales de otro operador. Las columnas que no aplican permanecen vacías. Las reglas estándar de CSV protegen comas, comillas y saltos de línea. La marca BOM UTF-8 permite que Excel detecte correctamente los acentos.
+
+Las muestras se exportan por {\ttfamily\small id}, conservando el orden de inserción. La exportación se escribe primero como archivo temporal y sólo se renombra al terminar.
+
+Para sesiones largas el CSV puede ser mucho mayor que SQLite y tardar en generarse. Actualmente la GUI no presenta porcentaje de progreso.
+
+\medskip\hrule\medskip
+
+\section{Privacidad, seguridad y gobernanza}
+
+\subsection{Medidas actuales}
+
+\begin{itemize}
+\item Los datos permanecen en la computadora central; el servidor sólo se comparte en LAN.
+\item No existe integración activa con Supabase.
+\item La GUI usa credenciales persistentes y separadas para investigador y operador; se
+generan aleatoriamente en el primer arranque y no cambian en reinicios normales.
+\item El archivo privado de credenciales está en
+{\ttfamily\small \textasciitilde{}/.config/muse-research/access.json} con modo
+{\ttfamily\small 0600}.
+\item Las operaciones sensibles exigen clave de investigador; el operador sólo accede a evaluación y estado mínimo.
+\item Las mutaciones exigen {\ttfamily\small X-Muse-Request: muse-web-ui} y Origin del mismo host.
+\item Se validan nombres de sesión, operadores, señales y lista {\ttfamily\small hci}.
+\item Los comandos se construyen como listas, sin concatenar shell arbitrario.
+\item El preview no acepta consultas SQL del usuario.
+\item Se recomiendan códigos seudónimos en lugar de nombres.
+\item Los directorios de sesión son privados para la cuenta de Linux.
+\end{itemize}
+
+\subsection{Límites de seguridad}
+
+\begin{itemize}
+\item SQLite, JSON, logs y CSV no están cifrados en reposo.
+\item Una persona con acceso a la cuenta de Linux puede leerlos.
+\item Las claves viajan por HTTP dentro de la LAN; debe usarse una red confiable. HTTPS es obligatorio antes de cualquier exposición pública.
+\item {\ttfamily\small pipeline.log} y los estados pueden contener direcciones MAC, que son identificadores
+persistentes de hardware.
+
+\item Los logs hijos en {\ttfamily\small /tmp/muse\_operador\_x.log} no forman parte del directorio privado de
+sesión y deben revisarse en una política de endurecimiento.
+
+\item Instalar la aplicación no oculta automáticamente el código Python. Empaquetado,
+ofuscación o distribución binaria es un proyecto separado y no equivale a seguridad criptográfica.
+
+\end{itemize}
+
+Para datos humanos sensibles se recomienda además cifrado de disco, cuentas separadas, copias de seguridad cifradas, consentimiento informado, periodos de retención y una tabla de seudónimos almacenada fuera del equipo de adquisición.
+
+\medskip\hrule\medskip
+
+\section{Verificación y pruebas actuales}
+
+\subsection{Evidencia de pruebas físicas realizadas}
+
+En pruebas locales reportadas con dos diademas simultáneas se confirmó:
+
+\begin{itemize}
+\item aparición de {\ttfamily\small muse\_operador\_a} y {\ttfamily\small muse\_operador\_b};
+\item tópicos EEG, IMU y PPG para ambos operadores;
+\item inserciones de las tres modalidades para ambos operadores;
+\item reconexión sin intercambiar inmediatamente la identidad dentro de la sesión;
+\item funcionamiento de IMU alrededor de 49–50 Hz;
+\item funcionamiento de PPG alrededor de 62–65 Hz;
+\item EEG observado por {\ttfamily\small ros2 topic hz} alrededor de 133–144 Hz.
+\end{itemize}
+
+IMU y PPG se aproximan a 52 y 64 Hz nominales. EEG permanece por debajo de sus 256 Hz nominales en la medición del tópico. Esto no impide afirmar que existe flujo EEG, pero sí impide asumir que se están conservando todas las muestras sólo porque la conexión indique {\ttfamily\small STREAMING}. Antes de una campaña científica grande se deben comparar, durante la misma ventana, muestras decodificadas, recibidas, publicadas y filas SQLite, y determinar si la diferencia proviene de decodificación, entrega por lotes, publicación ROS, medición de la herramienta o pérdida real.
+
+La arquitectura admite cuatro adaptadores y cuatro operadores, pero el soporte de código no sustituye una prueba física continua de cuatro diademas. Esa prueba sigue formando parte del plan de aceptación.
+
+\subsection{Cobertura automatizada}
+
+La suite automatizada cubre:
+
+\begin{itemize}
+\item reloj local monótono aun cuando el tick Athena no avanza;
+\item extracción de MACs y exclusión de dispositivos removidos;
+\item identificación por nombre, UUID, fabricante y OUI;
+\item rechazo de dispositivos ajenos;
+\item selección del runtime Python;
+\item escritura EEG por lotes;
+\item migración de columnas IMU;
+\item escritura PPG de 16 canales;
+\item ausencia de inserciones cuando la grabación está pausada;
+\item sanitización de nombres de sesión;
+\item rechazo de entrada {\ttfamily\small hci} con contenido de shell;
+\item creación del comando ROS fijo;
+\item intervalos start/stop sin detener el pipeline;
+\item reconstrucción de estado, batería y tasas desde logs;
+\item preview SQLite;
+\item exportación CSV rectangular, UTF-8 y quoting;
+\item exportadores heredados de TXT/Excel y protección contra fórmulas;
+\item exportación CSV separada por operador y por perfil;
+\item orden fijo de seis pasos, avance independiente y limpieza del formulario;
+\item validación de EEG por watermarks antes de aceptar ground truth;
+\item sincronización de intervalos y respuestas con el reloj de adquisición.
+\end{itemize}
+
+En la validación correspondiente a esta actualización se ejecutaron las 16 pruebas del
+paquete {\ttfamily\small muse\_web}; todas finalizaron correctamente.
+
+\subsection{Lo que las pruebas automatizadas no demuestran}
+
+Las pruebas automatizadas no reemplazan:
+
+\begin{itemize}
+\item una sesión física de cuatro diademas durante 30–60 minutos;
+\item pruebas de apagar y encender cada diadema en distintos órdenes;
+\item medición de pérdidas con CPU y disco bajo carga;
+\item validación del porcentaje de batería contra el indicador real;
+\item comparación temporal contra una señal común de referencia;
+\item validación fisiológica de PPG, BPM o HRV.
+\end{itemize}
+
+\medskip\hrule\medskip
+
+\section{Limitaciones conocidas}
+
+\subsection{Funcionales}
+
+\begin{itemize}
+\item PPG está activo, pero no hay BPM, HR ni HRV derivados.
+\item No hay indicador de calidad de contacto EEG.
+\item No hay detección automática de artefactos.
+\item Las secciones del taller funcionan como marcadores en SQLite, pero no existe un
+tópico ROS genérico para otros experimentos, condiciones o estímulos.
+\item No hay grabación {\ttfamily\small rosbag}.
+\item No hay visualización de ondas EEG en tiempo real; la GUI muestra tasas y filas.
+\item No hay selección independiente de modalidades: se guardan juntas.
+\item Sólo puede existir una sesión administrada por la GUI a la vez.
+\item El mapeo MAC-operador no sobrevive a una nueva sesión.
+\item No hay carga automática a nube ni sincronización entre computadoras.
+\end{itemize}
+
+\subsection{Técnicas}
+
+\begin{itemize}
+\item La batería depende de un atributo privado de {\ttfamily\small muselsl}.
+\item El estado de la GUI se reconstruye desde log, no mediante una conexión ROS directa.
+\item El scan se detiene cuando no hay adaptadores libres.
+\item La columna EEG {\ttfamily\small channel\_5} es herencia de esquema y siempre vale cero con Athena.
+\item No existen índices SQL adicionales a las claves primarias.
+\item El conteo exacto del preview puede volverse costoso en bases muy grandes.
+\item La exportación CSV puede tardar y carece de progreso o cancelación.
+\item {\ttfamily\small muse\_hrc/package.xml} y {\ttfamily\small setup.py} todavía declaran versión {\ttfamily\small 0.0.0}, licencia y
+descripción como {\ttfamily\small TODO}; debe corregirse antes de una distribución formal.
+
+\item No existe todavía un instalador cerrado ni protección del código fuente.
+\end{itemize}
+
+\subsection{Validación temporal}
+
+El reloj local y la monotonía entre lotes tienen pruebas unitarias, pero para afirmar sincronía científica entre dispositivos se requiere un protocolo físico específico. Las bases históricas deben auditarse: una sesión presenta timestamps comprimidos cuando {\ttfamily\small MAX(timestamp)-MIN(timestamp)} es incompatible con su duración real.
+
+\medskip\hrule\medskip
+
+\section{Recomendaciones de evolución}
+
+\subsection{Prioridad alta antes de una campaña grande}
+
+\begin{enumerate}
+\item Prueba de estrés con cuatro diademas durante al menos una hora.
+\item Medir pérdida por señal comparando recibidos, publicados y filas persistidas.
+\item Validar timestamps con un evento físico simultáneo visible en todos los dispositivos.
+\item Generalizar los marcadores de condición o estímulo más allá del taller actual e
+incorporarlos también como tópico ROS.
+\item Definir procedimiento para asociar participante seudónimo con {\ttfamily\small operador\_x}.
+\item Crear copia de seguridad automática al finalizar sin borrar el original.
+\end{enumerate}
+
+\subsection{Prioridad media}
+
+\begin{enumerate}
+\item Nodo de calidad de señal y contacto.
+\item Índices y consultas de resumen por sesión/operador.
+\item Barra de progreso y exportación en background.
+\item Mover logs hijos a la carpeta privada de sesión.
+\item Publicar un mensaje de estado tipado en lugar de JSON para consumidores ROS.
+\item Documentar y fijar versiones de firmware, BlueZ, Bleak y {\ttfamily\small muselsl}.
+\item Actualizar metadatos de paquete, versión y licencia.
+\end{enumerate}
+
+\subsection{Prioridad de investigación}
+
+\begin{enumerate}
+\item Nodo PPG validado para BPM y HRV.
+\item Segmentación por ventanas y control de artefactos.
+\item Exportación analítica por participante y condición.
+\item Integración opcional con marcadores de tarea y robot.
+\item Pipeline posterior para PSD, EEGNet, LOSO y xAI.
+\end{enumerate}
+
+\subsection{Prioridad de seguridad y distribución}
+
+\begin{enumerate}
+\item Cifrado de disco o de archivos de sesión.
+\item Política de retención y borrado verificable.
+\item Instalador reproducible con versiones bloqueadas.
+\item Servicio local bajo una cuenta sin privilegios.
+\item Evaluar empaquetado binario sólo después de definir el modelo de amenaza.
+\end{enumerate}
+
+\medskip\hrule\medskip
+
+\section{Guía breve de operación}
+
+\subsection{GUI}
+
+\begin{MuseCode}
+source /opt/ros/humble/setup.bash
+cd /home/fernanda/muse
+source install/setup.bash
+source web_env/bin/activate
+python -m muse_web.app
+\end{MuseCode}
+
+Abrir el enlace de investigador impreso en la terminal y seguir:
+
+\begin{enumerate}
+\item preparar pipeline;
+\item esperar usuarios en “Transmitiendo”;
+\item medir señales;
+\item comenzar registro;
+\item compartir con cada participante el enlace de operador y pedir que seleccione su
+{\ttfamily\small operador\_x};
+\item iniciar y evaluar de manera independiente cada paso del taller;
+\item detener registro;
+\item finalizar y descargar, según la necesidad, el CSV sólo Muse o el CSV completo de
+cada operador.
+\end{enumerate}
+
+\subsection{Terminal sin GUI}
+
+\begin{MuseCode}
+source /opt/ros/humble/setup.bash
+cd /home/fernanda/muse
+source install/setup.bash
+
+ros2 launch muse_hrc muse_system.launch.py \
+  hci_devices:=hci1,hci2,hci3,hci4
+\end{MuseCode}
+
+Este modo graba inmediatamente en {\ttfamily\small \textasciitilde{}/muse\_telemetry.db}, salvo que se pase {\ttfamily\small recording\_enabled:=false}.
+
+\subsection{Diagnóstico manual}
+
+\begin{MuseCode}
+ros2 node list
+ros2 topic list -t
+ros2 topic hz /operador_a/eeg
+ros2 topic hz /operador_a/imu
+ros2 topic hz /operador_a/ppg
+ros2 service list
+\end{MuseCode}
+
+Cada terminal nueva debe cargar {\ttfamily\small /opt/ros/humble/setup.bash} e {\ttfamily\small install/setup.bash} para que ROS 2 conozca los mensajes {\ttfamily\small muse\_msgs}.
+
+\medskip\hrule\medskip
+
+\section{Glosario}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.450\textwidth}>{\raggedright\arraybackslash}p{0.450\textwidth}@{}}
+\toprule
+\textbf{Término} & \textbf{Definición en este proyecto} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Término} & \textbf{Definición en este proyecto} \\
+\midrule
+\endhead
+Athena & Hardware/firmware Muse S y protocolo BLE usado por estas diademas \\
+BLE & Bluetooth de bajo consumo \\
+BlueZ & Subsistema Bluetooth de Linux \\
+GATT & Servicios y características mediante los que BLE transmite datos \\
+MAC & Dirección de hardware observada por Bluetooth \\
+{\ttfamily\small hciN} & Controlador Bluetooth enumerado por Linux \\
+EEG & Señal eléctrica del cuero cabelludo \\
+PPG & Señal óptica relacionada con cambios de volumen sanguíneo \\
+IMU & Acelerómetro y giroscopio \\
+Hz & Eventos o muestras por segundo \\
+BPM & Latidos por minuto; todavía no se calcula \\
+HRV & Variabilidad de la frecuencia cardiaca; todavía no se calcula \\
+ROS 2 & Middleware de comunicación entre procesos \\
+Nodo & Proceso o componente ROS con una responsabilidad \\
+Tópico & Canal continuo de mensajes \\
+Servicio & Solicitud/respuesta puntual \\
+QoS & Política de entrega y almacenamiento temporal de mensajes \\
+SQLite & Base de datos local en un archivo \\
+WAL & Log transaccional previo a consolidación de SQLite \\
+FIFO & Primero en entrar, primero en salir \\
+Watchdog & Comprobación periódica de que un componente sigue vivo \\
+Timestamp & Marca temporal de una muestra \\
+Payload & Contenido útil de un paquete o mensaje \\
+\bottomrule
+\end{longtable}
+
+\medskip\hrule\medskip
+
+\section{Referencia de archivos fuente}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.450\textwidth}>{\raggedright\arraybackslash}p{0.450\textwidth}@{}}
+\toprule
+\textbf{Archivo} & \textbf{Función} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Archivo} & \textbf{Función} \\
+\midrule
+\endhead
+{\ttfamily\small muse\_hrc/launch/muse\_system.launch.py} & Ensambla los nodos base \\
+{\ttfamily\small muse\_hrc/muse\_hrc/discovery\_node.py} & Scan, pool, identidad y procesos \\
+{\ttfamily\small muse\_hrc/muse\_hrc/ble\_identity.py} & Reglas puras de identificación BLE \\
+{\ttfamily\small muse\_hrc/muse\_hrc/python\_runtime.py} & Selección de intérprete Athena \\
+{\ttfamily\small muse\_hrc/muse\_hrc/athena\_adapter.py} & Backend Bleak fijado a {\ttfamily\small hci} \\
+{\ttfamily\small muse\_hrc/muse\_hrc/athena\_protocol.py} & Reloj local y espaciado temporal por lote \\
+{\ttfamily\small muse\_hrc/muse\_hrc/muse\_node.py} & Decodificación, publicación y reconexión \\
+{\ttfamily\small muse\_hrc/muse\_hrc/database\_node.py} & Puerta de grabación y SQLite \\
+{\ttfamily\small muse\_msgs/msg/EegSample.msg} & Contrato EEG \\
+{\ttfamily\small muse\_msgs/msg/PpgSample.msg} & Contrato PPG \\
+{\ttfamily\small muse\_web/muse\_web/session\_manager.py} & Ciclo de vida de sesiones \\
+{\ttfamily\small muse\_web/muse\_web/app.py} & API FastAPI LAN, autenticación y rutas por rol \\
+{\ttfamily\small muse\_web/muse\_web/workshop.py} & Diez pasos, cuatro ítems Likert y referencia del instrumento \\
+{\ttfamily\small muse\_web/muse\_web/static/} & Interfaz de navegador \\
+{\ttfamily\small muse\_web/muse\_web/csv\_export.py} & Exportación CSV actual \\
+{\ttfamily\small muse\_web/muse\_web/excel\_export.py} & Exportación Excel heredada \\
+{\ttfamily\small practica\_pick\_and\_place\_physical.md} & Especificación didáctica vigente del taller físico \\
+{\ttfamily\small muse\_hrc/test/} y {\ttfamily\small muse\_web/test/} & Pruebas automatizadas \\
+\bottomrule
+\end{longtable}
+
+\medskip\hrule\medskip
+
+\section{Conclusión}
+
+El pipeline evolucionó de una conexión EEG individual operada por terminal a un sistema local multimodal y multiusuario. La arquitectura actual separa descubrimiento, adquisición, comunicación, persistencia y operación. Sus decisiones principales —adaptador dedicado, cola secuencial de conexión, proceso por diadema, mensajes tipados, lotes SQLite y puerta manual de grabación— responden directamente a fallas observadas durante pruebas físicas.
+
+El sistema ya es utilizable para adquisición local de EEG, IMU y PPG con varios usuarios,
+con ground truth recurrente asociado a cada sección y exportaciones separadas, siempre que se sigan verificando
+batería, tasas, correspondencia de operadores y calidad de colocación antes de registrar.
+La siguiente etapa debe formalizar la validación temporal y fisiológica, generalizar los
+marcadores experimentales, ejecutar pruebas de estrés, fortalecer la seguridad de datos y
+desarrollar el procesamiento derivado de PPG.
+
+Este reporte debe actualizarse cada vez que cambien el protocolo Athena, el esquema de datos, las frecuencias, la forma de asignar operadores o el ciclo de vida de una sesión.
+
+
+\end{document}
