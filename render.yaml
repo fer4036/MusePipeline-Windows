@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: muse-research-cloud
+    runtime: docker
+    dockerfilePath: ./Dockerfile.cloud
+    healthCheckPath: /health
+    envVars:
+      - key: MUSE_CLOUD_RESEARCHER_TOKEN
+        sync: false
+      - key: MUSE_CLOUD_AGENT_TOKENS
+        sync: false
+      - key: MUSE_CLOUD_OPERATOR_TOKEN
+        sync: false

@@ -39,7 +39,13 @@ def safe_component(value, fallback):
 
 
 def _process_is_alive(pid):
-    """Return whether a Linux PID exists and is not a zombie."""
+    """Return whether a local PID exists and, on Linux, is not a zombie."""
+    if os.name == 'nt':
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return False
+        return True
     try:
         process_stat = (Path('/proc') / str(pid) / 'stat').read_text(
             encoding='utf-8'
@@ -115,6 +121,8 @@ class SessionManager:
             candidates = (
                 workspace_root / 'muse_env' / 'bin' / 'python',
                 workspace_root.parent / 'muse_env' / 'bin' / 'python',
+                workspace_root / 'muse_env' / 'Scripts' / 'python.exe',
+                workspace_root.parent / 'muse_env' / 'Scripts' / 'python.exe',
                 Path(sys.executable),
             )
             selected_python = next(
@@ -203,12 +211,20 @@ class SessionManager:
             log_file = log_path.open('a', encoding='utf-8')
             os.chmod(log_path, 0o600)
             try:
+                process_options = {
+                    'stdout': log_file,
+                    'stderr': subprocess.STDOUT,
+                    'text': True,
+                }
+                if os.name == 'nt':
+                    process_options['creationflags'] = (
+                        subprocess.CREATE_NEW_PROCESS_GROUP
+                    )
+                else:
+                    process_options['start_new_session'] = True
                 process = self._popen_factory(
                     command,
-                    stdout=log_file,
-                    stderr=subprocess.STDOUT,
-                    start_new_session=True,
-                    text=True,
+                    **process_options,
                 )
             except Exception as error:
                 log_file.close()
@@ -882,6 +898,12 @@ class SessionManager:
         with self._lock:
             if self._active is not None and self._process is not None:
                 if self._active['metadata'].get('backend') == 'standalone':
+                    if os.name == 'nt':
+                        # Windows has no /proc command line verification. Avoid
+                        # leaving a child that a restarted GUI cannot safely
+                        # identify and control.
+                        self.stop(export=True)
+                        return
                     # The Python collector is the local edge process. A web
                     # restart must not interrupt BLE or data capture; the next
                     # SessionManager will reattach through session metadata.
@@ -892,6 +914,8 @@ class SessionManager:
 
     def _recover_standalone_session(self):
         """Reattach to the newest verified standalone collector, if any."""
+        if os.name == 'nt':
+            return
         allowed_states = {'ready', 'recording'}
         for session_dir in sorted(self.sessions_root.iterdir(), reverse=True):
             metadata_path = session_dir / 'metadata.json'
@@ -1323,6 +1347,25 @@ class SessionManager:
     @staticmethod
     def _stop_process(process):
         if process.poll() is not None:
+            return
+        if os.name == 'nt':
+            try:
+                process.send_signal(signal.CTRL_BREAK_EVENT)
+                process.wait(timeout=15)
+                return
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            try:
+                process.terminate()
+                process.wait(timeout=5)
+                return
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+            process.kill()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
             return
         try:
             os.killpg(process.pid, signal.SIGINT)

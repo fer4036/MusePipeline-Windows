@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Muse Research Cloud</title>
+  <link rel="stylesheet" href="/assets/cloud.css">
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Muse Research</p>
+      <h1 id="page-title">Panel cloud</h1>
+      <p id="connection">Buscando el agente local…</p>
+    </header>
+
+    <section id="researcher" class="panel hidden">
+      <h2>Control del experimento</h2>
+      <div class="grid">
+        <label>Agente<select id="agent"></select></label>
+        <label>Participante<input id="subject" value="participante"></label>
+        <label>Experimento<input id="experiment" value="baseline"></label>
+        <label>Diademas<input id="max-devices" type="number" min="1" max="16" value="4"></label>
+      </div>
+      <label>Notas<textarea id="notes"></textarea></label>
+      <div class="actions">
+        <button data-action="prepare_pipeline">Preparar pipeline y conectar</button>
+        <button data-action="start_recording">Comenzar registro</button>
+        <button data-action="stop_recording">Detener registro</button>
+        <button data-action="stop_session" class="secondary">Cerrar y exportar</button>
+      </div>
+      <h2>Diademas</h2>
+      <div id="operators" class="cards"></div>
+      <pre id="session"></pre>
+    </section>
+
+    <section id="operator" class="panel hidden">
+      <h2>Evaluación de engagement cognitivo</h2>
+      <div class="grid">
+        <label>Agente<select id="operator-agent"></select></label>
+        <label>Operador<select id="operator-id"></select></label>
+        <label>Sección<select id="section">
+          <option value="paso_1">El ciclo pick-and-place</option>
+          <option value="paso_2">El home se enseña con las manos</option>
+          <option value="paso_3">Waypoints</option>
+          <option value="paso_4">Simetría del ciclo</option>
+          <option value="paso_5">Validación con pieza real</option>
+          <option value="paso_6">El robot no sabe si agarró</option>
+        </select></label>
+      </div>
+      <button id="start-section">Iniciar esta sección</button>
+      <div id="questions"></div>
+      <button id="submit-ground-truth">Enviar respuestas</button>
+      <p>La evaluación se limpia al enviarse y puede repetirse cada 10 minutos sin cambiar de sección.</p>
+    </section>
+    <p id="message" role="status"></p>
+  </main>
+  <script src="/assets/cloud.js"></script>
+</body>
+</html>

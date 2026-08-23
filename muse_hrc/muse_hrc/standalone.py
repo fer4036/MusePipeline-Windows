@@ -10,7 +10,12 @@ import threading
 import time
 
 from muse_hrc.acquisition import MuseDeviceSession
-from muse_hrc.auto_discovery import AutomaticDeviceSupervisor
+from muse_hrc.backends import (
+    BACKENDS,
+    discovery_supervisor,
+    resolve_backend,
+    session_class,
+)
 from muse_hrc.ble_identity import parse_manufacturer_ids
 from muse_hrc.device_supervisor import retry_delay
 from muse_hrc.models import DeviceStatus
@@ -48,6 +53,7 @@ class StandaloneCollector:
         connection_settle_seconds=CONNECTION_SETTLE_SECONDS,
         retry_presence_scan_seconds=RETRY_PRESENCE_SCAN_SECONDS,
         retry_presence_interval=RETRY_PRESENCE_INTERVAL_SECONDS,
+        session_factory=MuseDeviceSession,
     ):
         self.devices = list(devices)
         self.store = store
@@ -64,6 +70,7 @@ class StandaloneCollector:
         self.retry_presence_interval = max(
             1.0, float(retry_presence_interval)
         )
+        self.session_factory = session_factory
         self.sessions = {}
         self.retry_attempts = {operator_id: 0 for operator_id, _, _ in devices}
         self.next_retry = {operator_id: 0.0 for operator_id, _, _ in devices}
@@ -102,7 +109,7 @@ class StandaloneCollector:
     def stop(self):
         self.running = False
         if self.discovery_supervisor is not None:
-            self.discovery_supervisor.bluez.cancel_scan()
+            self.discovery_supervisor.cancel_scan()
         self.pump()
         for session in self.sessions.values():
             session.stop()
@@ -202,7 +209,7 @@ class StandaloneCollector:
         previous = self.sessions.get(operator_id)
         if previous is not None:
             previous.stop()
-        session = MuseDeviceSession(
+        session = self.session_factory(
             operator_id=operator_id,
             mac_address=mac_address,
             hci_device=hci_device,
@@ -424,6 +431,18 @@ def build_parser():
         ),
     )
     parser.add_argument(
+        '--acquisition-backend',
+        choices=BACKENDS,
+        default='auto',
+        help='Backend BLE; auto usa BrainFlow en Windows y Athena en Linux.',
+    )
+    parser.add_argument(
+        '--max-devices',
+        type=int,
+        default=4,
+        help='Máximo de diademas en descubrimiento Windows.',
+    )
+    parser.add_argument(
         '--manufacturer-ids',
         default='',
         help='IDs BlueZ adicionales separados por coma, por ejemplo 0x1234.',
@@ -464,6 +483,10 @@ def build_parser():
         '--control-file',
         help='Archivo JSON privado usado por la GUI para controlar grabación.',
     )
+    parser.add_argument('--cloud-url', help='Gateway ws:// o wss:// opcional.')
+    parser.add_argument('--agent-id', default='', help='Identidad de este agente.')
+    parser.add_argument('--agent-token', default='', help='Token del agente cloud.')
+    parser.add_argument('--session-id', default='', help='Sesión enviada al cloud.')
     return parser
 
 
@@ -472,6 +495,7 @@ def main(argv=None):
     arguments = parser.parse_args(argv)
     devices = arguments.device or []
     supervisor = None
+    selected_backend = resolve_backend(arguments.acquisition_backend)
     if arguments.hci_devices:
         hci_devices = tuple(
             item.strip()
@@ -480,8 +504,10 @@ def main(argv=None):
         )
         if not hci_devices:
             parser.error('--hci-devices no contiene adaptadores válidos')
-        supervisor = AutomaticDeviceSupervisor(
-            hci_devices,
+        supervisor = discovery_supervisor(
+            selected_backend,
+            hci_devices=hci_devices,
+            max_devices=min(arguments.max_devices, len(hci_devices)),
             manufacturer_ids=parse_manufacturer_ids(
                 arguments.manufacturer_ids
             ),
@@ -496,6 +522,37 @@ def main(argv=None):
         FileRecordingControl(arguments.control_file)
         if arguments.control_file else None
     )
+    cloud_transport = None
+
+    def handle_cloud_command(payload):
+        action = payload.get('action')
+        if action == 'start_recording':
+            store.set_recording(True)
+        elif action == 'stop_recording':
+            store.set_recording(False)
+            store.flush()
+        else:
+            raise ValueError(f'Comando cloud no permitido: {action}')
+        return {'recording': store.recording_enabled}
+
+    status_callback = None
+    if arguments.cloud_url:
+        if not arguments.agent_id or not arguments.agent_token:
+            parser.error('--cloud-url requiere --agent-id y --agent-token')
+        from muse_hrc.cloud_transport import AgentWebSocketTransport
+        cloud_transport = AgentWebSocketTransport(
+            arguments.cloud_url,
+            arguments.agent_id,
+            arguments.agent_token,
+            session_id=arguments.session_id,
+            command_handler=handle_cloud_command,
+            log_callback=StandaloneCollector._log,
+        )
+
+        def status_callback(payload):
+            StandaloneCollector._print_status(payload)
+            cloud_transport.publish('status', payload)
+
     collector = StandaloneCollector(
         devices,
         store,
@@ -503,6 +560,8 @@ def main(argv=None):
         scan_interval=arguments.scan_interval,
         recording_control=recording_control,
         connection_settle_seconds=arguments.connection_settle_seconds,
+        session_factory=session_class(selected_backend),
+        status_callback=status_callback,
     )
 
     def request_stop(_signum, _frame):
@@ -510,10 +569,16 @@ def main(argv=None):
 
     signal.signal(signal.SIGINT, request_stop)
     signal.signal(signal.SIGTERM, request_stop)
+    if hasattr(signal, 'SIGBREAK'):
+        signal.signal(signal.SIGBREAK, request_stop)
     try:
+        if cloud_transport is not None:
+            cloud_transport.start()
         collector.run()
     finally:
         collector.stop()
+        if cloud_transport is not None:
+            cloud_transport.stop()
 
 
 if __name__ == '__main__':

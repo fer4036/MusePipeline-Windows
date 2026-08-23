@@ -113,6 +113,10 @@ class AutomaticDeviceSupervisor:
             duration=duration,
         )
 
+    def cancel_scan(self):
+        """Cancel an in-flight platform scan during collector shutdown."""
+        self.bluez.cancel_scan()
+
     def _log(self, level, message):
         if self.log_callback is not None:
             self.log_callback(level, message)
