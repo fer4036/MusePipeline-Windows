@@ -2,8 +2,12 @@ services:
   - type: web
     name: muse-research-cloud
     runtime: docker
+    branch: feature/windows-cloud-agent
     dockerfilePath: ./Dockerfile.cloud
+    autoDeployTrigger: commit
     healthCheckPath: /health
+    numInstances: 1
+    maxShutdownDelaySeconds: 60
     envVars:
       - key: MUSE_CLOUD_RESEARCHER_TOKEN
         sync: false
