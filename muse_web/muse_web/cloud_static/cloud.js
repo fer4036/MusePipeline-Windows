@@ -29,6 +29,23 @@ function agentIsFresh(agent) {
   return Date.now() / 1000 - agent.last_seen < 8;
 }
 
+function websocketBase() {
+  return `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
+}
+
+function updateAccessLinks() {
+  if (role !== 'pipeline') return;
+  const selected = selectedAgent() === '__all__'
+    ? (agents[0]?.agent_id || 'lab-windows-01')
+    : (selectedAgent() || 'lab-windows-01');
+  document.querySelector('#operator-link').value = (
+    `${location.origin}/?role=operator&token=CLAVE_OPERADOR`
+  );
+  document.querySelector('#agent-link').value = (
+    `${websocketBase()}/ws/agent/${selected}`
+  );
+}
+
 document.querySelector('#page-title').textContent = (
   role === 'operator' ? 'Evaluacion del participante' : 'Panel del investigador'
 );
@@ -69,6 +86,10 @@ function selectedResearchAgents() {
 function renderAgentCards() {
   const container = document.querySelector('#agents');
   if (!container) return;
+  if (!agents.length) {
+    container.innerHTML = '<article class="agent-card stale"><strong>Sin agente local</strong><span>Esperando conexion WebSocket</span></article>';
+    return;
+  }
   container.innerHTML = agents.map(agent => {
     const operators = agent.operators || [];
     const connected = agentIsFresh(agent);
@@ -92,7 +113,7 @@ function renderAgentCards() {
 
 function renderOperators(current) {
   const sourceAgents = selectedAgent() === '__all__' ? agents : (current ? [current] : []);
-  document.querySelector('#operators').innerHTML = sourceAgents.flatMap(agent => (
+  const cards = sourceAgents.flatMap(agent => (
     (agent.operators || []).map(item => `
       <article class="card">
         <strong>${escapeHtml(item.operator_id || item.operator || 'operador')}</strong>
@@ -107,7 +128,10 @@ function renderOperators(current) {
         </dl>
       </article>
     `)
-  )).join('');
+  ));
+  document.querySelector('#operators').innerHTML = cards.length
+    ? cards.join('')
+    : '<article class="card"><strong>Sin diadema activa</strong><span>Prepara el pipeline cuando el agente este conectado.</span></article>';
 }
 
 async function refresh() {
@@ -128,6 +152,14 @@ async function refresh() {
         ? `${freshCount} agente(s) conectado(s) por WebSocket`
         : 'No hay agentes locales conectados'
     );
+    if (role === 'pipeline') {
+      document.querySelector('#agent-count').textContent = (
+        freshCount
+          ? `${freshCount} agente(s) conectado(s)`
+          : 'Sin agentes conectados'
+      );
+      updateAccessLinks();
+    }
     if (role === 'operator') {
       fillSelect(
         document.querySelector('#operator-id'),
@@ -140,6 +172,7 @@ async function refresh() {
     } else {
       renderAgentCards();
       renderOperators(current);
+      updateAccessLinks();
       const sessions = selectedAgent() === '__all__'
         ? Object.fromEntries(agents.map(agent => [agent.agent_id, agent.session || {}]))
         : (current?.session || {});
@@ -195,6 +228,11 @@ document.querySelectorAll('[data-action]').forEach(button => button.addEventList
     message.textContent = error.message;
   }
 }));
+
+const researcherAgentSelect = document.querySelector('#agent');
+if (researcherAgentSelect) {
+  researcherAgentSelect.addEventListener('change', updateAccessLinks);
+}
 
 const phrases = [
   ['task_engagement', 'Estuve involucrado/a con el tema que estaba trabajando.'],

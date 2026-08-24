@@ -8,53 +8,74 @@
 </head>
 <body>
   <main>
-    <header>
-      <p class="eyebrow">Muse Research</p>
+    <header class="hero">
+      <p class="eyebrow">Muse Research Cloud</p>
       <h1 id="page-title">Panel cloud</h1>
-      <p id="connection">Buscando agentes locales...</p>
+      <p id="connection">Buscando el agente local...</p>
     </header>
 
     <section id="researcher" class="panel hidden">
-      <h2>Control del experimento</h2>
+      <div class="section-title">
+        <h2>Control del experimento</h2>
+        <span id="agent-count">Sin agentes conectados</span>
+      </div>
+
+      <div class="quick-links">
+        <label>Panel del operador<input id="operator-link" readonly></label>
+        <label>WebSocket del agente<input id="agent-link" readonly></label>
+      </div>
+
       <div class="grid">
         <label>Agente<select id="agent"></select></label>
         <label>Participante<input id="subject" value="participante"></label>
         <label>Experimento<input id="experiment" value="baseline"></label>
         <label>Diademas por agente<input id="max-devices" type="number" min="1" max="1" value="1"></label>
       </div>
+
       <label>Notas<textarea id="notes"></textarea></label>
+
       <div class="actions">
         <button data-action="prepare_pipeline">Preparar pipeline y conectar</button>
         <button data-action="start_recording">Comenzar registro</button>
         <button data-action="stop_recording">Detener registro</button>
         <button data-action="stop_session" class="secondary">Cerrar y exportar</button>
       </div>
-      <h2>Agentes conectados</h2>
-      <div id="agents" class="agent-grid"></div>
-      <h2>Diademas</h2>
-      <div id="operators" class="cards"></div>
+
+      <div class="status-columns">
+        <section>
+          <h2>Agentes locales</h2>
+          <div id="agents" class="agent-grid"></div>
+        </section>
+        <section>
+          <h2>Diademas</h2>
+          <div id="operators" class="cards"></div>
+        </section>
+      </div>
+
+      <h2>Sesion</h2>
       <pre id="session"></pre>
     </section>
 
     <section id="operator" class="panel hidden">
-      <h2>Evaluaci&oacute;n de engagement cognitivo</h2>
+      <h2>Evaluacion de engagement cognitivo</h2>
       <div class="grid">
         <label>Agente<select id="operator-agent"></select></label>
         <label>Operador<select id="operator-id"></select></label>
-        <label>Secci&oacute;n<select id="section">
+        <label>Seccion<select id="section">
           <option value="paso_1">El ciclo pick-and-place</option>
-          <option value="paso_2">El home se ense&ntilde;a con las manos</option>
+          <option value="paso_2">El home se ensena con las manos</option>
           <option value="paso_3">Waypoints</option>
-          <option value="paso_4">Simetr&iacute;a del ciclo</option>
-          <option value="paso_5">Validaci&oacute;n con pieza real</option>
-          <option value="paso_6">El robot no sabe si agarr&oacute;</option>
+          <option value="paso_4">Simetria del ciclo</option>
+          <option value="paso_5">Validacion con pieza real</option>
+          <option value="paso_6">El robot no sabe si agarro</option>
         </select></label>
       </div>
-      <button id="start-section">Iniciar esta secci&oacute;n</button>
+      <button id="start-section">Iniciar esta seccion</button>
       <div id="questions"></div>
       <button id="submit-ground-truth">Enviar respuestas</button>
-      <p>La evaluaci&oacute;n se limpia al enviarse y puede repetirse cada 10 minutos sin cambiar de secci&oacute;n.</p>
+      <p class="hint">La evaluacion se limpia al enviarse y puede repetirse cada 10 minutos sin cambiar de seccion.</p>
     </section>
+
     <p id="message" role="status"></p>
   </main>
   <script src="/assets/cloud.js"></script>
