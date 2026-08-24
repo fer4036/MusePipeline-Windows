@@ -1,6 +1,6 @@
 """Fixed protocol metadata for the Pick and Place engagement study."""
 
-GROUND_TRUTH_INTERVAL_SECONDS = 10 * 60
+GROUND_TRUTH_INTERVAL_SECONDS = 3 * 60
 
 PRACTICE = {
     'id': 'pick-and-place-physical',
