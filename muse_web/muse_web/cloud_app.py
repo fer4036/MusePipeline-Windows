@@ -3,6 +3,7 @@
 import asyncio
 import hmac
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -13,6 +14,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.websockets import WebSocketDisconnect
 
 from muse_hrc.cloud_protocol import CloudEnvelope
 
@@ -20,8 +22,11 @@ from muse_hrc.cloud_protocol import CloudEnvelope
 RESEARCHER_TOKEN = os.environ.get('MUSE_CLOUD_RESEARCHER_TOKEN', '')
 OPERATOR_TOKEN = os.environ.get('MUSE_CLOUD_OPERATOR_TOKEN', '')
 COMMAND_TIMEOUT_SECONDS = 15.0
-CLOUD_COOKIE = 'muse_cloud_access'
+LEGACY_CLOUD_COOKIE = 'muse_cloud_access'
+RESEARCHER_COOKIE = 'muse_cloud_researcher'
+OPERATOR_COOKIE = 'muse_cloud_operator'
 CLOUD_STATIC = Path(__file__).resolve().parent / 'cloud_static'
+LOGGER = logging.getLogger(__name__)
 
 
 def _agent_tokens():
@@ -37,22 +42,43 @@ def _agent_tokens():
     return {str(key): str(value) for key, value in tokens.items()}
 
 
+def _agent_token_config():
+    try:
+        return _agent_tokens(), ''
+    except RuntimeError as error:
+        return {}, str(error)
+
+
 def _bearer(authorization):
     prefix = 'Bearer '
     return authorization[len(prefix):] if authorization.startswith(prefix) else ''
 
 
-def _request_token(request, authorization):
-    return (
-        _bearer(authorization)
-        or request.cookies.get(CLOUD_COOKIE, '')
-    )
+def _request_token(request, authorization, *cookie_names):
+    bearer = _bearer(authorization)
+    if bearer:
+        return bearer
+    for cookie_name in cookie_names:
+        token = request.cookies.get(cookie_name, '')
+        if token:
+            return token
+    return ''
+
+
+def _secure_cookie(request):
+    forwarded_proto = request.headers.get('x-forwarded-proto', '')
+    return request.url.scheme == 'https' or forwarded_proto == 'https'
 
 
 def require_researcher(
     request: Request, authorization: str = Header(default='')
 ):
-    candidate = _request_token(request, authorization)
+    candidate = _request_token(
+        request,
+        authorization,
+        RESEARCHER_COOKIE,
+        LEGACY_CLOUD_COOKIE,
+    )
     if (
         not RESEARCHER_TOKEN
         or not candidate
@@ -64,11 +90,25 @@ def require_researcher(
 def require_operator(
     request: Request, authorization: str = Header(default='')
 ):
-    candidate = _request_token(request, authorization)
+    operator_candidate = _request_token(
+        request,
+        authorization,
+        OPERATOR_COOKIE,
+    )
+    researcher_candidate = _request_token(
+        request,
+        authorization,
+        RESEARCHER_COOKIE,
+        LEGACY_CLOUD_COOKIE,
+    )
     valid = (
-        OPERATOR_TOKEN and hmac.compare_digest(candidate, OPERATOR_TOKEN)
+        OPERATOR_TOKEN and hmac.compare_digest(
+            operator_candidate, OPERATOR_TOKEN
+        )
     ) or (
-        RESEARCHER_TOKEN and hmac.compare_digest(candidate, RESEARCHER_TOKEN)
+        RESEARCHER_TOKEN and hmac.compare_digest(
+            researcher_candidate, RESEARCHER_TOKEN
+        )
     )
     if not valid:
         raise HTTPException(status_code=401, detail='Clave de participante inválida')
@@ -202,6 +242,7 @@ app.mount('/assets', StaticFiles(directory=CLOUD_STATIC), name='cloud-assets')
 
 @app.get('/')
 def cloud_entry(
+    request: Request,
     role: str | None = None,
     token: str | None = None,
     agent: str | None = None,
@@ -220,21 +261,31 @@ def cloud_entry(
             raise HTTPException(status_code=401, detail='Clave de acceso inválida')
         query = f'?role={role}' + (f'&agent={agent}' if agent else '')
         response = RedirectResponse('/' + query, status_code=303)
+        cookie_name = (
+            RESEARCHER_COOKIE if role == 'pipeline' else OPERATOR_COOKIE
+        )
         response.set_cookie(
-            CLOUD_COOKIE,
+            cookie_name,
             token,
             httponly=True,
-            secure=True,
+            secure=_secure_cookie(request),
             samesite='strict',
             max_age=12 * 60 * 60,
         )
+        response.delete_cookie(LEGACY_CLOUD_COOKIE)
         return response
     return FileResponse(CLOUD_STATIC / 'index.html')
 
 
 @app.get('/health')
 def health():
-    return {'ok': True, 'agents': len(registry.connections)}
+    tokens, configuration_error = _agent_token_config()
+    return {
+        'ok': not configuration_error,
+        'agents': len(registry.connections),
+        'configured_agent_ids': sorted(tokens),
+        'configuration_error': configuration_error,
+    }
 
 
 @app.get('/api/cloud/agents', dependencies=[Depends(require_researcher)])
@@ -299,7 +350,12 @@ async def send_operator_command(agent_id: str, command: AgentCommand):
 
 @app.websocket('/ws/agent/{agent_id}')
 async def agent_socket(websocket: WebSocket, agent_id: str):
-    expected = _agent_tokens().get(agent_id, '')
+    tokens, configuration_error = _agent_token_config()
+    if configuration_error:
+        LOGGER.error('Configuracion cloud invalida: %s', configuration_error)
+        await websocket.close(code=1011)
+        return
+    expected = tokens.get(agent_id, '')
     supplied = _bearer(websocket.headers.get('authorization', ''))
     if not expected or not supplied or not hmac.compare_digest(expected, supplied):
         await websocket.close(code=1008)
@@ -326,6 +382,8 @@ async def agent_socket(websocket: WebSocket, agent_id: str):
                 future = connection.pending.get(command_id)
                 if future is not None and not future.done():
                     future.set_result(envelope.payload)
+    except WebSocketDisconnect:
+        return
     finally:
         await registry.detach(agent_id, connection)
 

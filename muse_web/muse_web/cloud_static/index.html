@@ -11,7 +11,7 @@
     <header>
       <p class="eyebrow">Muse Research</p>
       <h1 id="page-title">Panel cloud</h1>
-      <p id="connection">Buscando el agente local…</p>
+      <p id="connection">Buscando agentes locales...</p>
     </header>
 
     <section id="researcher" class="panel hidden">
@@ -20,7 +20,7 @@
         <label>Agente<select id="agent"></select></label>
         <label>Participante<input id="subject" value="participante"></label>
         <label>Experimento<input id="experiment" value="baseline"></label>
-        <label>Diademas<input id="max-devices" type="number" min="1" max="16" value="4"></label>
+        <label>Diademas por agente<input id="max-devices" type="number" min="1" max="1" value="1"></label>
       </div>
       <label>Notas<textarea id="notes"></textarea></label>
       <div class="actions">
@@ -29,29 +29,31 @@
         <button data-action="stop_recording">Detener registro</button>
         <button data-action="stop_session" class="secondary">Cerrar y exportar</button>
       </div>
+      <h2>Agentes conectados</h2>
+      <div id="agents" class="agent-grid"></div>
       <h2>Diademas</h2>
       <div id="operators" class="cards"></div>
       <pre id="session"></pre>
     </section>
 
     <section id="operator" class="panel hidden">
-      <h2>Evaluación de engagement cognitivo</h2>
+      <h2>Evaluaci&oacute;n de engagement cognitivo</h2>
       <div class="grid">
         <label>Agente<select id="operator-agent"></select></label>
         <label>Operador<select id="operator-id"></select></label>
-        <label>Sección<select id="section">
+        <label>Secci&oacute;n<select id="section">
           <option value="paso_1">El ciclo pick-and-place</option>
-          <option value="paso_2">El home se enseña con las manos</option>
+          <option value="paso_2">El home se ense&ntilde;a con las manos</option>
           <option value="paso_3">Waypoints</option>
-          <option value="paso_4">Simetría del ciclo</option>
-          <option value="paso_5">Validación con pieza real</option>
-          <option value="paso_6">El robot no sabe si agarró</option>
+          <option value="paso_4">Simetr&iacute;a del ciclo</option>
+          <option value="paso_5">Validaci&oacute;n con pieza real</option>
+          <option value="paso_6">El robot no sabe si agarr&oacute;</option>
         </select></label>
       </div>
-      <button id="start-section">Iniciar esta sección</button>
+      <button id="start-section">Iniciar esta secci&oacute;n</button>
       <div id="questions"></div>
       <button id="submit-ground-truth">Enviar respuestas</button>
-      <p>La evaluación se limpia al enviarse y puede repetirse cada 10 minutos sin cambiar de sección.</p>
+      <p>La evaluaci&oacute;n se limpia al enviarse y puede repetirse cada 10 minutos sin cambiar de secci&oacute;n.</p>
     </section>
     <p id="message" role="status"></p>
   </main>

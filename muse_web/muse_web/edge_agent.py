@@ -37,7 +37,7 @@ class EdgeAgentController:
             requested = int(payload.get('max_devices', self.max_devices))
             maximum = min(max(requested, 1), self.max_devices)
             hci_devices = ','.join(
-                f'hci{index}' for index in range(maximum)
+                f'hci{index}' for index in range(1, maximum + 1)
             )
             return self.manager.start(
                 payload.get('subject_code', 'participante'),
@@ -138,7 +138,7 @@ def build_parser():
         default=os.environ.get('MUSE_AGENT_TOKEN', ''),
     )
     parser.add_argument('--sessions-root')
-    parser.add_argument('--max-devices', type=int, default=4)
+    parser.add_argument('--max-devices', type=int, default=1)
     return parser
 
 

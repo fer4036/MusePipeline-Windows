@@ -21,7 +21,7 @@ def test_prepare_pipeline_always_selects_python_and_bounds_device_count():
 
     assert result == {'running': True}
     manager.start.assert_called_once_with(
-        'p01', 'baseline', 'hci0,hci1,hci2,hci3', '', 'standalone'
+        'p01', 'baseline', 'hci1,hci2,hci3,hci4', '', 'standalone'
     )
 
 

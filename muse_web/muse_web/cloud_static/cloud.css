@@ -1,26 +1,187 @@
 :root {
-  --rose: rgb(255, 227, 222);
-  --blue: rgb(222, 240, 255);
-  --plum: rgb(191, 134, 156);
-  --indigo: rgb(134, 140, 191);
-  --ink: #25263a;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --line: #d7dce3;
+  --ink: #1f2733;
+  --muted: #667085;
+  --accent: #2563eb;
+  --accent-dark: #1d4ed8;
+  --danger: #9f1239;
+  --ok: #0f766e;
+  --warn: #b45309;
 }
+
 * { box-sizing: border-box; }
-body { margin: 0; background: linear-gradient(135deg, var(--blue), var(--rose)); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
-main { width: min(1050px, 94%); margin: 3rem auto; }
-header, .panel { background: rgba(255,255,255,.92); border-radius: 22px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 14px 40px rgba(70,70,100,.12); }
-.eyebrow { color: #686eaa; text-transform: uppercase; letter-spacing: .12em; font-weight: 700; }
-h1, h2 { margin-top: .25rem; }
-.grid, .cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(210px,1fr)); gap: 1rem; }
-label { display: grid; gap: .35rem; font-weight: 650; }
-input, select, textarea { width: 100%; border: 1px solid var(--indigo); border-radius: 10px; padding: .75rem; background: white; }
-.actions { display: flex; flex-wrap: wrap; gap: .7rem; margin: 1rem 0; }
-button { border: 0; border-radius: 999px; padding: .8rem 1.1rem; background: var(--indigo); color: white; font-weight: 700; cursor: pointer; }
-button.secondary { background: var(--plum); }
-.card { padding: 1rem; border-radius: 14px; background: var(--blue); }
-.question { margin: 1rem 0; padding: 1rem; background: var(--rose); border-radius: 14px; }
-.scale { display: flex; gap: 1rem; flex-wrap: wrap; }
-.scale label { display: flex; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+main {
+  width: min(1180px, 94%);
+  margin: 24px auto 40px;
+}
+
+header,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+
+.eyebrow {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+h1,
+h2 {
+  margin: 0 0 12px;
+}
+
+#connection {
+  color: var(--muted);
+  margin: 0;
+}
+
+.grid,
+.cards,
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 5px;
+  font-weight: 650;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  background: white;
+  color: var(--ink);
+}
+
+textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 18px;
+}
+
+button {
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 14px;
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-dark);
+}
+
+button.secondary {
+  background: var(--danger);
+}
+
+.card,
+.agent-card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+}
+
+.agent-card.online {
+  border-left: 4px solid var(--ok);
+}
+
+.agent-card.stale {
+  border-left: 4px solid var(--warn);
+}
+
+.agent-card div:first-child,
+.card strong + span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.question {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.scale {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scale label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .hidden { display: none; }
-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-#message { min-height: 1.5rem; font-weight: 700; }
+
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+#message {
+  min-height: 24px;
+  font-weight: 700;
+}
