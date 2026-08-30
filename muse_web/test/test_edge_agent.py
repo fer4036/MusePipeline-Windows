@@ -4,7 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from muse_web.edge_agent import EdgeAgentController
+from muse_web.edge_agent import EdgeAgentController, build_parser
 
 
 def test_prepare_pipeline_always_selects_python_and_bounds_device_count():
@@ -53,3 +53,24 @@ def test_ground_truth_command_preserves_operator_section_and_scores():
 def test_unknown_cloud_command_is_rejected():
     with pytest.raises(ValueError, match='no permitido'):
         EdgeAgentController(Mock()).handle({'action': 'delete_all'})
+
+
+def test_cognitive_cloud_reporting_is_opt_in():
+    arguments = build_parser().parse_args([
+        '--cloud-url', 'wss://example.test/ws/agent/lab',
+        '--agent-id', 'lab',
+        '--agent-token', 'token',
+    ])
+
+    assert arguments.enable_cognitive_cloud is False
+
+    enabled = build_parser().parse_args([
+        '--cloud-url', 'wss://example.test/ws/agent/lab',
+        '--agent-id', 'lab',
+        '--agent-token', 'token',
+        '--enable-cognitive-cloud',
+        '--cognitive-model', 'ml_output/models/xgboost_final.joblib',
+    ])
+
+    assert enabled.enable_cognitive_cloud is True
+    assert enabled.cognitive_model.endswith('xgboost_final.joblib')

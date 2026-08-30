@@ -375,6 +375,14 @@ class SessionManager:
                 'log_tail': self._tail(self._active['log'], max_lines=60),
             }
 
+    def active_database_path(self):
+        """Return the active raw SQLite path, or None when there is no session."""
+
+        with self._lock:
+            if self._active is None:
+                return None
+            return str(self._active['database'])
+
     def list_sessions(self):
         sessions = []
         for path in sorted(self.sessions_root.iterdir(), reverse=True):

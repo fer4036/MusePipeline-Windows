@@ -134,6 +134,64 @@ function renderOperators(current) {
     : '<article class="card"><strong>Sin diadema activa</strong><span>Prepara el pipeline cuando el agente este conectado.</span></article>';
 }
 
+function cognitiveScore(value) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(2) : 'sin modelo';
+}
+
+function renderCognitiveState(current) {
+  const container = document.querySelector('#cognitive-state');
+  if (!container) return;
+  const sourceAgents = selectedAgent() === '__all__' ? agents : (current ? [current] : []);
+  const cards = sourceAgents.flatMap(agent => {
+    const cognitive = agent.session?.cognitive_state;
+    if (!cognitive || cognitive.enabled === false) {
+      return [`
+        <article class="card cognitive-card">
+          <strong>${escapeHtml(agent.agent_id)}</strong>
+          <span>Monitoreo cognitivo desactivado</span>
+        </article>
+      `];
+    }
+    if (!cognitive.operators?.length) {
+      return [`
+        <article class="card cognitive-card">
+          <strong>${escapeHtml(agent.agent_id)}</strong>
+          <span>${escapeHtml(cognitive.state || 'esperando datos')}</span>
+          <dl>
+            <dt>Modelo</dt><dd>${escapeHtml(cognitive.model_loaded ? 'cargado' : 'sin configurar')}</dd>
+            <dt>Ventana</dt><dd>${escapeHtml(cognitive.window_seconds || 60)} s</dd>
+            <dt>Actualizacion</dt><dd>${escapeHtml(cognitive.update_seconds || 30)} s</dd>
+          </dl>
+        </article>
+      `];
+    }
+    return cognitive.operators.map(item => {
+      const factors = (item.top_factors || []).map(factor => (
+        `<li>${escapeHtml(factor.feature)} <span>${Number(factor.contribution).toFixed(3)}</span></li>`
+      )).join('');
+      return `
+        <article class="card cognitive-card">
+          <strong>${escapeHtml(item.operator_id || 'operador')}</strong>
+          <span>${escapeHtml(agent.agent_id)}</span>
+          <div class="cognitive-score">${escapeHtml(cognitiveScore(item.score))}</div>
+          <dl>
+            <dt>Nivel</dt><dd>${escapeHtml(item.level || item.state || 'sin estimacion')}</dd>
+            <dt>Confianza</dt><dd>${Math.round(Number(item.confidence || 0) * 100)}%</dd>
+            <dt>EEG</dt><dd>${escapeHtml(item.n_eeg_samples || 0)} muestras</dd>
+            <dt>PPG</dt><dd>${escapeHtml(item.n_ppg_samples || 0)} muestras</dd>
+            <dt>Metodo</dt><dd>${escapeHtml(item.method || cognitive.state)}</dd>
+          </dl>
+          ${factors ? `<ol class="factor-list">${factors}</ol>` : ''}
+          ${item.message ? `<p class="hint">${escapeHtml(item.message)}</p>` : ''}
+        </article>
+      `;
+    });
+  });
+  container.innerHTML = cards.length
+    ? cards.join('')
+    : '<article class="card cognitive-card"><strong>Sin agente seleccionado</strong><span>Esperando conexion WebSocket</span></article>';
+}
+
 async function refresh() {
   try {
     const endpoint = role === 'operator'
@@ -172,6 +230,7 @@ async function refresh() {
     } else {
       renderAgentCards();
       renderOperators(current);
+      renderCognitiveState(current);
       updateAccessLinks();
       const sessions = selectedAgent() === '__all__'
         ? Object.fromEntries(agents.map(agent => [agent.agent_id, agent.session || {}]))

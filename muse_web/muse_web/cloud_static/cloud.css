@@ -177,6 +177,31 @@ button.secondary {
   color: var(--muted);
 }
 
+.cognitive-card {
+  background: #f7f9ff;
+}
+
+.cognitive-score {
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 800;
+  margin: 10px 0;
+  color: var(--indigo-dark);
+}
+
+.factor-list {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.factor-list li {
+  margin: 4px 0;
+}
+
+.factor-list span {
+  font-variant-numeric: tabular-nums;
+}
+
 dl {
   display: grid;
   grid-template-columns: max-content 1fr;
