@@ -180,6 +180,16 @@ function renderCognitiveState(current) {
             <dt>EEG</dt><dd>${escapeHtml(item.n_eeg_samples || 0)} muestras</dd>
             <dt>PPG</dt><dd>${escapeHtml(item.n_ppg_samples || 0)} muestras</dd>
             <dt>Metodo</dt><dd>${escapeHtml(item.method || cognitive.state)}</dd>
+            ${Number.isFinite(Number(item.relative_scem))
+              ? `<dt>SCEM relativo</dt><dd>${Number(item.relative_scem).toFixed(3)}</dd>`
+              : ''}
+            ${Number.isFinite(Number(item.calibration_anchor))
+              ? `<dt>Calibracion</dt><dd>${Number(item.calibration_anchor).toFixed(2)}</dd>`
+              : ''}
+            ${Number.isFinite(Number(item.raw_score))
+              ? `<dt>Sin suavizar</dt><dd>${Number(item.raw_score).toFixed(2)}</dd>`
+              : ''}
+            ${item.smoothing ? `<dt>Suavizado</dt><dd>${escapeHtml(item.smoothing)}</dd>` : ''}
           </dl>
           ${factors ? `<ol class="factor-list">${factors}</ol>` : ''}
           ${item.message ? `<p class="hint">${escapeHtml(item.message)}</p>` : ''}

@@ -34,9 +34,13 @@ class RealtimeCognitiveMonitor:
     def __init__(self, config: RealtimeConfig | None = None):
         self.config = config or RealtimeConfig()
         self.model = None
+        self.model_artifact = None
+        self.model_kind = 'none'
         self.model_error = None
         self.feature_names: list[str] = []
         self._shap_explainer = None
+        self._smooth_history: dict[str, list[float]] = {}
+        self._baseline_cache: dict[tuple[str, str], dict[str, float]] = {}
         if self.config.model_path:
             self._load_model(Path(self.config.model_path))
 
@@ -47,6 +51,7 @@ class RealtimeCognitiveMonitor:
         base = {
             'enabled': True,
             'model_loaded': self.model is not None,
+            'model_kind': self.model_kind,
             'model_path': self.config.model_path,
             'model_error': self.model_error,
             'window_seconds': self.config.window_seconds,
@@ -90,10 +95,30 @@ class RealtimeCognitiveMonitor:
         try:
             import joblib
 
-            self.model = joblib.load(model_path)
+            loaded = joblib.load(model_path)
+            self.model_artifact = loaded
+            if isinstance(loaded, dict) and 'stage_1_model' in loaded:
+                self.model = loaded['stage_1_model']
+                self.model_kind = 'stage1_relative_scem_stage2_calibrator'
+                self.feature_names = [str(name) for name in loaded.get(
+                    'feature_columns',
+                    [],
+                )]
+                return
+            if isinstance(loaded, dict) and 'pipeline' in loaded:
+                self.model = loaded['pipeline']
+                self.model_kind = 'sklearn_pipeline_dict'
+                self.feature_names = [str(name) for name in loaded.get(
+                    'feature_columns',
+                    [],
+                )]
+                return
+            self.model = loaded
+            self.model_kind = 'sklearn_pipeline'
             self.feature_names = self._infer_feature_names(self.model)
         except Exception as error:
             self.model = None
+            self.model_kind = 'load_error'
             self.model_error = str(error)
 
     def _operator_snapshot(self, connection, operator_id, started_at, ended_at):
@@ -125,7 +150,7 @@ class RealtimeCognitiveMonitor:
             'score': None,
             'level': None,
             'confidence': 0.0,
-            'method': 'xgboost_scem_regression'
+            'method': self.model_kind
             if self.model is not None else 'model_not_configured',
             'top_factors': [],
         }
@@ -157,18 +182,68 @@ class RealtimeCognitiveMonitor:
             result['feature_summary'] = self._feature_summary(features)
             return result
 
-        prediction, frame = self._predict(features)
+        prediction, frame, details = self._predict(
+            connection,
+            operator_id,
+            features,
+        )
+        result.update(details)
+        if prediction is None:
+            result['state'] = details.get('state', 'waiting_for_calibration')
+            result['feature_summary'] = self._feature_summary(features)
+            return result
         result['state'] = 'estimated'
         result['score'] = prediction
         result['level'] = self._level(prediction)
         result['top_factors'] = self._top_factors(frame, features)
         return result
 
-    def _predict(self, features):
+    def _predict(self, connection, operator_id, features):
         try:
             import pandas as pd
         except ImportError as error:
             raise RuntimeError('pandas es requerido para inferencia ML') from error
+
+        if self.model_kind == 'stage1_relative_scem_stage2_calibrator':
+            baseline = self._paso1_baseline(connection, operator_id)
+            calibration = self._initial_scem_calibration(connection, operator_id)
+            if baseline is None:
+                return None, pd.DataFrame(), {
+                    'state': 'waiting_for_paso_1_baseline',
+                    'message': (
+                        'Completa o registra datos del paso_1 para crear el '
+                        'baseline fisiologico del sujeto.'
+                    ),
+                }
+            adjusted = {
+                name: float(features.get(name, np.nan)) - float(baseline.get(name, 0.0))
+                for name in self.feature_names
+            }
+            frame = pd.DataFrame([adjusted])
+            relative = float(self.model.predict(frame)[0])
+            details = {
+                'relative_scem': relative,
+                'stage_1_target': 'relative_scem',
+                'physiological_baseline': 'paso_1',
+                'stage_2_calibration': 'initial_subject_scem_anchor',
+            }
+            if calibration is None:
+                details.update({
+                    'state': 'waiting_for_scem_calibration',
+                    'message': (
+                        'Envia la primera respuesta SCEM del operador para '
+                        'reconstruir el score absoluto.'
+                    ),
+                })
+                return None, frame, details
+            score = float(np.clip(calibration + relative, 1.0, 5.0))
+            smoothed = self._smooth(operator_id, score)
+            details.update({
+                'calibration_anchor': calibration,
+                'raw_score': score,
+                'smoothing': 'rolling3',
+            })
+            return smoothed, frame, details
 
         names = self.feature_names or sorted(features)
         frame = pd.DataFrame([{
@@ -176,9 +251,11 @@ class RealtimeCognitiveMonitor:
             for name in names
         }])
         prediction = float(self.model.predict(frame)[0])
-        return float(np.clip(prediction, 1.0, 5.0)), frame
+        return float(np.clip(prediction, 1.0, 5.0)), frame, {
+            'smoothing': 'none',
+        }
 
-    def _top_factors(self, frame, raw_features, limit=5):
+    def _top_factors(self, frame, raw_features=None, limit=5):
         shap_factors = self._shap_factors(frame, limit=limit)
         if shap_factors:
             return shap_factors
@@ -203,6 +280,7 @@ class RealtimeCognitiveMonitor:
         return self._ranked_factors(frame.columns, row, frame.iloc[0], limit)
 
     def _importance_factors(self, frame, raw_features, limit=5):
+        raw_features = raw_features or {}
         model_steps = getattr(self.model, 'named_steps', {})
         estimator = model_steps.get('model', self.model)
         importances = getattr(estimator, 'feature_importances_', None)
@@ -212,12 +290,19 @@ class RealtimeCognitiveMonitor:
         if importances is None:
             return []
         row = frame.iloc[0]
+        columns = list(frame.columns)
+        selector = model_steps.get('select')
+        if selector is not None and hasattr(selector, 'get_support'):
+            mask = selector.get_support()
+            columns = [column for column, keep in zip(columns, mask) if keep]
+            row = row[columns]
         values = np.asarray(importances, dtype=float)[:len(frame.columns)]
+        values = values[:len(columns)]
         scores = values * np.asarray([
-            raw_features.get(column, row[column])
-            for column in frame.columns
+            row[column] if column in row else raw_features.get(column, np.nan)
+            for column in columns
         ], dtype=float)
-        return self._ranked_factors(frame.columns, scores, row, limit)
+        return self._ranked_factors(columns, scores, row, limit)
 
     @staticmethod
     def _ranked_factors(columns, scores, row, limit):
@@ -269,6 +354,93 @@ class RealtimeCognitiveMonitor:
         eeg_ratio = min(1.0, n_eeg / max(1, self.config.min_eeg_samples))
         ppg_ratio = min(1.0, n_ppg / max(1, self.config.min_ppg_samples))
         return float(round(0.75 * eeg_ratio + 0.25 * ppg_ratio, 3))
+
+    def _paso1_baseline(self, connection, operator_id):
+        cache_key = (str(id(connection)), operator_id)
+        if cache_key in self._baseline_cache:
+            return self._baseline_cache[cache_key]
+        if not self._table_exists(connection, 'workshop_sections'):
+            return None
+        row = connection.execute(
+            'SELECT started_at, COALESCE(ended_at, ?) AS ended_at '
+            'FROM workshop_sections '
+            'WHERE operator = ? AND section_id = ? '
+            'ORDER BY started_at ASC LIMIT 1',
+            (time.time(), operator_id, 'paso_1'),
+        ).fetchone()
+        if row is None:
+            return None
+        features = self._features_for_interval(
+            connection,
+            operator_id,
+            float(row['started_at']),
+            float(row['ended_at']),
+        )
+        if not features:
+            return None
+        self._baseline_cache[cache_key] = features
+        return features
+
+    def _initial_scem_calibration(self, connection, operator_id):
+        if not self._table_exists(connection, 'ground_truth_responses'):
+            return None
+        row = connection.execute(
+            'SELECT task_engagement, effort, persistence, flow, engagement_score '
+            'FROM ground_truth_responses '
+            'WHERE operator = ? '
+            'ORDER BY submitted_at ASC, id ASC LIMIT 1',
+            (operator_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        values = [
+            row['task_engagement'],
+            row['effort'],
+            row['persistence'],
+            row['flow'],
+        ]
+        if all(value is not None for value in values):
+            return float(np.mean(values))
+        if row['engagement_score'] is not None:
+            return float(row['engagement_score'])
+        return None
+
+    def _features_for_interval(self, connection, operator_id, started_at, ended_at):
+        eeg = self._signal_rows(
+            connection,
+            'eeg_logs',
+            operator_id,
+            EEG_CHANNELS,
+            started_at,
+            ended_at,
+        )
+        ppg = self._signal_rows(
+            connection,
+            'ppg_logs',
+            operator_id,
+            PPG_CHANNELS,
+            started_at,
+            ended_at,
+        )
+        if len(eeg['timestamp']) < self.config.min_eeg_samples:
+            return {}
+        features = {}
+        features.update(eeg_band_features(
+            {channel: eeg[channel] for channel in EEG_CHANNELS},
+            eeg['timestamp'],
+        ).features)
+        if len(ppg['timestamp']) >= self.config.min_ppg_samples:
+            features.update(ppg_features(
+                {channel: ppg[channel] for channel in PPG_CHANNELS},
+                ppg['timestamp'],
+            ).features)
+        return features
+
+    def _smooth(self, operator_id, score):
+        history = self._smooth_history.setdefault(operator_id, [])
+        history.append(float(score))
+        del history[:-3]
+        return float(np.mean(history))
 
     @staticmethod
     def _table_exists(connection, table):

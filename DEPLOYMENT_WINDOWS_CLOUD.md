@@ -126,8 +126,14 @@ Implementacion agregada:
 - Publica a la GUI cloud solamente si se activa `--enable-cognitive-cloud`.
 - Si no se configura modelo, la GUI muestra que las features estan listas pero
   que falta cargar el predictor.
-- Si se configura `xgboost_final.joblib`, reporta score SCEM estimado, nivel
-  bajo/medio/alto, confianza, muestras disponibles y factores SHAP/importancia.
+- Si se configura `stage1_relative_scem_stage2_calibrator.joblib`, usa el
+  modelo calibrado mas reciente:
+  - resta el baseline fisiologico del `paso_1`;
+  - predice SCEM relativo;
+  - reconstruye SCEM absoluto con la primera respuesta SCEM del operador;
+  - suaviza con media movil de 3 predicciones;
+  - reporta nivel bajo/medio/alto, confianza, muestras disponibles y factores
+    explicativos del modelo.
 
 Comando del agente con monitoreo cognitivo habilitado:
 
@@ -139,13 +145,24 @@ python -m muse_web.edge_agent `
   --max-devices 1 `
   --sessions-root "$env:USERPROFILE\MuseResearch\sessions" `
   --enable-cognitive-cloud `
-  --cognitive-model "ml_output\models\xgboost_final.joblib" `
+  --cognitive-model "ml_output\experiments\stage1_relative_scem_stage2_calibrator.joblib" `
   --cognitive-window-seconds 60 `
   --cognitive-update-seconds 30
 ```
 
 Si solo quieres probar la GUI sin publicar predicciones cognitivas, omite
 `--enable-cognitive-cloud`.
+
+Para que el modelo calibrado reporte SCEM absoluto en tiempo real deben existir
+dos elementos en la sesion local:
+
+1. Datos EEG suficientes del `paso_1`, usado como baseline fisiologico pasivo de
+   tarea.
+2. La primera respuesta SCEM del operador, usada como ancla de calibracion del
+   sujeto.
+
+Mientras falte alguno, la GUI mostrara `waiting_for_paso_1_baseline` o
+`waiting_for_scem_calibration` en lugar de inventar una prediccion.
 
 ## Resultados actuales del entrenamiento ML
 
@@ -198,7 +215,10 @@ Archivos principales:
 - `ml_output\models\metrics_loso.csv`: accuracy/regresion por fold y global.
 - `ml_output\models\predictions_loso.csv`: prediccion vs SCEM real por ventana.
 - `ml_output\models\training_summary.json`: resumen de datos/modelos.
-- `ml_output\models\xgboost_final.joblib`: modelo sugerido para inferencia.
+- `ml_output\experiments\stage1_relative_scem_stage2_calibrator.joblib`: modelo
+  calibrado sugerido para inferencia realtime.
+- `ml_output\models\xgboost_final.joblib`: modelo anterior compatible, pero ya
+  no recomendado como primera opcion para realtime.
 - `ml_output\models\xgboost_shap_global.csv`: factores globales del modelo.
 - `ml_output\models\xgboost_shap_local_top10.csv`: factores por prediccion.
 
