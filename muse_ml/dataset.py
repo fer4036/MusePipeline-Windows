@@ -175,6 +175,17 @@ def _feature_rows(window_id: str, features: dict[str, float]):
         }
 
 
+def _temporal_label_weight(start: float, end: float, label_time: float, half_life: float):
+    if not all(np.isfinite(value) for value in (start, end, label_time)):
+        return 1.0, 0.0
+    center = (start + end) / 2.0
+    distance = max(0.0, label_time - center)
+    if half_life <= 0:
+        return 1.0, distance
+    weight = math.exp(-math.log(2.0) * distance / half_life)
+    return float(max(0.25, min(1.0, weight))), float(distance)
+
+
 def build_dataset(
     input_dir: Path,
     output_dir: Path,
@@ -182,6 +193,7 @@ def build_dataset(
     stride_seconds: float = 30.0,
     min_eeg_samples: int = 1024,
     min_ppg_samples: int = 600,
+    label_half_life_seconds: float = 180.0,
 ) -> dict[str, int]:
     """Extract ML windows/features/labels from all complete CSV files."""
 
@@ -203,7 +215,8 @@ def build_dataset(
             'experiment', 'operator', 'section_id', 'response_id',
             'measurement_number', 'start_time', 'end_time', 'window_size_s',
             'stride_s', 'n_eeg_samples', 'n_ppg_samples', 'valid_eeg',
-            'valid_ppg',
+            'valid_ppg', 'temporal_distance_to_label_s',
+            'temporal_label_weight',
         ])
         labels_writer = csv.DictWriter(labels_stream, fieldnames=[
             'window_id', 'response_id', 'task_engagement', 'effort',
@@ -243,6 +256,12 @@ def build_dataset(
                             f'{response.session_name}:{response.operator}:'
                             f'{response.measurement_number}:{index}'
                         )
+                        temporal_weight, temporal_distance = _temporal_label_weight(
+                            start,
+                            end,
+                            response.window_ended_at,
+                            label_half_life_seconds,
+                        )
                         feature_values = {}
                         if valid_eeg:
                             eeg_values = {
@@ -280,6 +299,8 @@ def build_dataset(
                             'n_ppg_samples': len(ppg_window),
                             'valid_eeg': int(valid_eeg),
                             'valid_ppg': int(valid_ppg),
+                            'temporal_distance_to_label_s': temporal_distance,
+                            'temporal_label_weight': temporal_weight,
                         })
                         labels_writer.writerow({
                             'window_id': window_id,
@@ -302,6 +323,7 @@ def build_dataset(
         'input_dir': str(input_dir),
         'window_seconds': window_seconds,
         'stride_seconds': stride_seconds,
+        'label_half_life_seconds': label_half_life_seconds,
         'files': [path.name for path in files],
         'windows': windows_count,
         'labels': labels_count,
@@ -322,6 +344,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--output-dir', default='ml_output')
     parser.add_argument('--window-seconds', type=float, default=60.0)
     parser.add_argument('--stride-seconds', type=float, default=30.0)
+    parser.add_argument('--label-half-life-seconds', type=float, default=180.0)
     return parser
 
 
@@ -332,6 +355,7 @@ def main(argv=None):
         Path(args.output_dir),
         window_seconds=args.window_seconds,
         stride_seconds=args.stride_seconds,
+        label_half_life_seconds=args.label_half_life_seconds,
     )
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
