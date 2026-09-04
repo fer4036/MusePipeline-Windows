@@ -1,0 +1,17 @@
+{
+    "ROS2.distro": "humble",
+    "python.autoComplete.extraPaths": [
+        "/home/fernanda/muse/build/muse_hrc",
+        "/home/fernanda/muse/install/muse_hrc/lib/python3.10/site-packages",
+        "/home/fernanda/ws_moveit2/install/xarm_flask_control/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/fernanda/muse/build/muse_hrc",
+        "/home/fernanda/muse/install/muse_hrc/lib/python3.10/site-packages",
+        "/home/fernanda/ws_moveit2/install/xarm_flask_control/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}

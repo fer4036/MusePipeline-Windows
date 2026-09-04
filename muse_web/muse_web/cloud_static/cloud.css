@@ -1,0 +1,271 @@
+:root {
+  --rose: #ffe3de;
+  --blue: #def0ff;
+  --mist: #f8fbff;
+  --plum: #bf869c;
+  --indigo: #868cbf;
+  --indigo-dark: #6068a8;
+  --ink: #25263a;
+  --muted: #68708d;
+  --line: #d8dcef;
+  --ok: #0f766e;
+  --warn: #b45309;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: linear-gradient(135deg, rgba(222, 240, 255, .95), rgba(255, 227, 222, .96));
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+main {
+  width: min(1120px, 94%);
+  margin: 40px auto;
+}
+
+.hero,
+.panel {
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid rgba(134, 140, 191, .28);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: 0 14px 38px rgba(70, 70, 100, .12);
+}
+
+.eyebrow {
+  color: var(--indigo-dark);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 12px;
+  font-weight: 750;
+  margin: 0 0 6px;
+}
+
+h1,
+h2 {
+  margin: 0 0 12px;
+}
+
+h1 {
+  font-size: clamp(32px, 5vw, 54px);
+  line-height: 1.05;
+}
+
+h2 {
+  font-size: 20px;
+}
+
+#connection,
+.hint,
+.section-title span {
+  color: var(--muted);
+  margin: 0;
+}
+
+.section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.grid,
+.quick-links,
+.cards,
+.agent-grid,
+.status-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.quick-links {
+  margin-bottom: 16px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: 650;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--indigo);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+
+input[readonly] {
+  background: var(--mist);
+  color: var(--muted);
+}
+
+textarea {
+  min-height: 86px;
+  resize: vertical;
+  margin-top: 14px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 22px;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 11px 16px;
+  background: var(--indigo);
+  color: white;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--indigo-dark);
+}
+
+button.secondary {
+  background: var(--plum);
+}
+
+.card,
+.agent-card,
+.question {
+  border: 1px solid rgba(134, 140, 191, .28);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.card,
+.agent-card {
+  background: var(--blue);
+}
+
+.agent-card.online {
+  background: #e8fbf7;
+  border-left: 5px solid var(--ok);
+}
+
+.agent-card.stale {
+  background: #fff7ed;
+  border-left: 5px solid var(--warn);
+}
+
+.agent-card strong,
+.card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.agent-card span,
+.card span {
+  color: var(--muted);
+}
+
+.cognitive-card {
+  background: #f7f9ff;
+}
+
+.cognitive-score {
+  font-size: 34px;
+  line-height: 1.1;
+  font-weight: 800;
+  margin: 10px 0;
+  color: var(--indigo-dark);
+}
+
+.factor-list {
+  margin: 12px 0 0;
+  padding-left: 20px;
+}
+
+.factor-list li {
+  margin: 4px 0;
+}
+
+.factor-list span {
+  font-variant-numeric: tabular-nums;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+}
+
+dt {
+  color: var(--muted);
+}
+
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.question {
+  margin: 14px 0;
+  background: var(--rose);
+}
+
+.scale {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scale label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hidden { display: none; }
+
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid rgba(134, 140, 191, .35);
+  border-radius: 12px;
+  padding: 14px;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+#message {
+  min-height: 24px;
+  font-weight: 750;
+}
+
+@media (max-width: 640px) {
+  main {
+    width: min(100% - 24px, 1120px);
+    margin: 18px auto;
+  }
+
+  .hero,
+  .panel {
+    padding: 18px;
+  }
+
+  button {
+    width: 100%;
+  }
+}

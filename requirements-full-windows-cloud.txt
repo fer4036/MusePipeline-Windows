@@ -1,0 +1,11 @@
+﻿cd "$env:USERPROFILE\MusePipeline-ROS2"
+
+git switch feature/windows-cloud-agent
+git pull origin feature/windows-cloud-agent
+
+@'
+-r requirements-cloud.txt
+-r requirements-windows.txt
+pytest
+./muse_hrc
+./muse_web

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muse Research</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><p class="eyebrow">ESTUDIO DE INTERACCIÓN</p><h1>Muse Research</h1></div>
+    <div class="privacy"><span></span> Datos locales · red privada</div>
+  </header>
+
+  <nav class="view-tabs" aria-label="Modo de uso">
+    <button class="view-tab active" type="button" data-view="operator" aria-selected="true">Operador · evaluación</button>
+    <button class="view-tab" type="button" data-view="pipeline" aria-selected="false">Investigador · control del pipeline</button>
+  </nav>
+
+  <main>
+    <section id="operator-view" class="app-view operator-view">
+      <section class="operator-intro">
+        <p class="eyebrow">EVALUACIÓN DEL OPERADOR</p>
+        <h2>Tu experiencia en esta sección</h2>
+        <p>Selecciona tu usuario e inicia la sección que vas a realizar. Mientras permanezca activa, responde las cuatro afirmaciones cada 10 minutos. Cada medición quedará vinculada a esa sección.</p>
+      </section>
+
+      <section class="panel workshop-panel">
+        <div class="panel-heading-row">
+          <div class="panel-title"><div><h3>Engagement cognitivo</h3><p>La respuesta se guarda con el mismo reloj temporal de la diadema.</p></div></div>
+          <span id="workshop-summary" class="protocol-pill">0 de 6 secciones</span>
+        </div>
+        <div class="operator-identity">
+          <label>Tu usuario conectado
+            <select id="ground-truth-operator" required disabled><option value="">Selecciona tu usuario</option></select>
+          </label>
+          <p>Verifica cuidadosamente tu identificador antes de comenzar.</p>
+        </div>
+        <div class="workshop-grid">
+          <div>
+            <h4>Sección del taller</h4>
+            <p class="hint protocol-hint">Presiona iniciar justo cuando comiences la actividad. Las mediciones no terminan la sección; usa el botón terminar únicamente cuando cambies al siguiente paso.</p>
+            <div id="workshop-sections" class="workshop-sections"><p class="empty-state">El investigador debe preparar la sesión y comenzar la grabación.</p></div>
+          </div>
+          <form id="ground-truth-form" class="ground-truth-form">
+            <div><h4>Medición de los últimos 10 minutos</h4><p class="hint protocol-hint">Indica cuánto describe cada afirmación tu experiencia durante el intervalo más reciente.</p></div>
+            <div id="assessment-timing" class="assessment-timing">
+              <div><small>PRÓXIMA MEDICIÓN</small><strong id="assessment-status">Inicia una sección</strong></div>
+              <b id="assessment-countdown">10:00</b>
+            </div>
+            <label>Sección activa
+              <select id="ground-truth-section" required disabled><option value="">Primero inicia una sección</option></select>
+            </label>
+            <div id="engagement-items" class="engagement-items"></div>
+            <div class="likert-anchors"><span>1 · Nada cierto para mí</span><span>3 · Neutral</span><span>5 · Muy cierto para mí</span></div>
+            <button id="ground-truth-submit" class="primary" type="submit" disabled>Enviar medición</button>
+            <p id="ground-truth-message" class="message" aria-live="polite"></p>
+            <p class="instrument-note">Instrumento: Rotgans y Schmidt (2011), <i>Cognitive engagement in the problem-based learning classroom</i>, DOI 10.1007/s10459-011-9272-9. Escala Likert 1–5; la redacción española es una traducción operativa.</p>
+          </form>
+        </div>
+      </section>
+    </section>
+
+    <section id="pipeline-view" class="app-view" hidden>
+    <section class="pipeline-status-row">
+      <div class="status-card">
+        <span id="status-dot" class="status-dot"></span>
+        <div><small>ESTADO GENERAL</small><strong id="pipeline-status">Consultando…</strong><p id="active-session">Sin sesión activa</p></div>
+      </div>
+    </section>
+
+    <section class="control-grid">
+      <article class="panel">
+        <div class="panel-title"><div><h3>Preparar sesión</h3><p>Conecta las diademas sin guardar todavía.</p></div></div>
+        <form id="session-form">
+          <label>Código de prueba o participantes
+            <input id="subject-code" required maxlength="64" placeholder="GRUPO-023" autocomplete="off">
+          </label>
+          <label>Experimento
+            <input id="experiment" required maxlength="80" placeholder="Stroop baseline" autocomplete="off">
+          </label>
+          <label>Adaptadores BLE
+            <input id="hci-devices" required value="hci1,hci2,hci3,hci4" pattern="hci[0-9]+(,hci[0-9]+)*">
+          </label>
+          <label>Backend de adquisición
+            <select id="pipeline-backend">
+              <option value="standalone" selected>Python directo — recomendado para captura</option>
+              <option value="ros2">ROS 2 — integración con robot</option>
+            </select>
+          </label>
+          <label>Notas opcionales
+            <textarea id="notes" maxlength="1000" rows="2" placeholder="Condición, incidencias o contexto"></textarea>
+          </label>
+          <button id="prepare-button" class="primary" type="submit">Preparar pipeline y conectar</button>
+        </form>
+      </article>
+
+      <article class="panel recording-panel">
+        <div class="panel-title"><div><h3>Control de grabación</h3><p>Transmitir no equivale a guardar.</p></div></div>
+        <div class="recording-state">
+          <span id="recording-dot" class="recording-dot"></span>
+          <div><small>ESTADO</small><strong id="recording-status">En espera</strong><p id="recording-time">00:00:00</p></div>
+        </div>
+        <div class="recording-actions">
+          <button id="record-button" class="record" type="button" disabled>● Comenzar a registrar</button>
+          <button id="pause-button" class="danger" type="button" disabled>■ Detener registro</button>
+          <button id="finish-button" class="secondary" type="button" disabled>Finalizar y crear ambas versiones CSV</button>
+        </div>
+        <p class="hint">EEG, IMU y PPG se inician y detienen juntos para conservar la sincronización.</p>
+        <p id="form-message" class="message" aria-live="polite"></p>
+      </article>
+    </section>
+
+    <section class="panel users-panel">
+      <div class="panel-heading-row">
+        <div class="panel-title"><div><h3>Usuarios y señales</h3><p>Estado en vivo, duración, batería y frecuencia publicada.</p></div></div>
+        <button id="refresh-users" class="small-button" type="button">Actualizar</button>
+      </div>
+      <div id="users-grid" class="users-grid"><p class="empty-state">Prepara el pipeline para detectar usuarios.</p></div>
+      <p class="hint">PPG es la señal óptica cruda usada para derivar ritmo cardiaco; esta versión todavía no calcula BPM clínicamente validados.</p>
+    </section>
+
+    <section class="diagnostic-grid">
+      <article class="panel monitor">
+        <div class="panel-heading-row">
+          <div class="panel-title"><div><h3>Tail del pipeline</h3><p>Últimos eventos del backend de adquisición.</p></div></div>
+          <div class="compact-actions"><button id="refresh-log" class="small-button" type="button">Actualizar tail</button><button id="graph-button" class="small-button" type="button" disabled>Ver arquitectura activa</button></div>
+        </div>
+        <pre id="log-output">Esperando una sesión…</pre>
+        <details class="graph-details"><summary>Arquitectura activa</summary><pre id="graph-output">Presiona “Ver arquitectura activa”.</pre></details>
+      </article>
+
+      <article class="panel preview-panel">
+        <div class="panel-heading-row">
+          <div class="panel-title"><div><h3>Preview de base de datos</h3><p>Conteos y últimas muestras guardadas.</p></div></div>
+          <button id="preview-button" class="small-button" type="button" disabled>Ver preview</button>
+        </div>
+        <div id="database-preview" class="database-preview"><p class="empty-state">El preview estará disponible después de preparar una sesión.</p></div>
+      </article>
+    </section>
+
+    <section class="panel sessions-panel">
+      <div class="panel-title"><div><h3>Sesiones locales</h3><p>Por operador se entrega una versión sólo Muse y otra con Muse, secciones y escala Likert.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sesión</th><th>Código</th><th>Experimento</th><th>Ground truth</th><th>Estado</th><th>CSV por operador</th></tr></thead>
+          <tbody id="sessions-body"><tr><td colspan="6">Cargando…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+    </section>
+  </main>
+
+  <footer><span id="operator-footer">Tus respuestas se guardan localmente para esta sesión de investigación.</span><span id="pipeline-footer" hidden>Los datos permanecen en <code>~/MuseResearch/sessions</code>. Ningún dato se envía a la nube.</span></footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>

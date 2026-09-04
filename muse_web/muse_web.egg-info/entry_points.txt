@@ -1,0 +1,4 @@
+[console_scripts]
+muse_cloud = muse_web.cloud_app:main
+muse_edge_agent = muse_web.edge_agent:main
+muse_web = muse_web.app:main
